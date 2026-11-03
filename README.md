@@ -178,3 +178,16 @@ lines, engraved relief, region names, corner rosettes and cartouche scroll-work,
   halos, a desk with banker's lamp and open book, globe, rolling ladder, rug; seen from the
   road as an ashlar building with its front cut away. The library backdrop is now only
   lightly blurred/dimmed (`main.js`). It is hidden until p > 0.72 (fully fogged before).
+
+## Entering the library, shadows & fields (v6)
+
+- The library stands 20 units past the last era, at the end of a lamp-lit road: a stone
+  podium with three steps, a facade with tall lit windows, a carved "BIBLIOTHÈQUE" over a
+  doorway with open doors, lanterns, a flagged forecourt and warm light spilling out.
+  The camera climbs the steps and passes through the doorway (keys .9 / .955 / 1).
+- Soft shadow map (desktop only, `?noshadow` to disable; dropped automatically on slow
+  machines): the key light and its small shadow frustum follow the era in view; only the
+  dioramas cast. The key now rakes from the left so shadows fall across each base.
+- A faint warm light pool on the ground under each era.
+- Landscape: a patchwork of ploughed/sown fields draped on the relief, a chapel and two
+  windmills between the eras. Portrait: the harbour approach leans towards the quay.
