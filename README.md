@@ -115,3 +115,18 @@ All surfaces are matte and textured at runtime — no image files:
 - `js/dioramas.js → makeMaterials()` uses them as colour **and** bump maps, roughness 0.78–0.95, metalness 0 (except iron 0.25 and the mirrors), `envMapIntensity` ≈ 0.45.
 - `bake()` adds per-vertex contact AO (darker where parts meet the base), ±4 % tone jitter per face, and world-space box-projected UVs so texel density is constant.
 - Paper (pages, plates) gets a faint warm emissive lift as a cheap subsurface-like sheen.
+
+## The journey (v2): one continuous camera flight
+
+- `js/scene.js` is a pure function of one progress value `p`. Scroll only sets a *target*; the render loop
+  damps `p → target` every frame (`1 − e^(−dt·k)`, `CONFIG.damping`), so scrollbar drags, End/Home or fast
+  wheels glide through the story instead of cutting. Headlines, era captions, letterbox and backdrop blur are
+  computed from the same damped value (`main.js → updateOverlays`).
+- Everything (book, 5 map plates, 5 dioramas, ground, route) is built in `init()` and warmed up (shaders +
+  textures) before the loader fades. Nothing is created or shown by scroll callbacks.
+- Camera: `buildCameraPath()` — two `CatmullRomCurve3` splines (position + look target) through keyframes
+  `K(p, pos, look)`. Edit those keys to re-stage the flight.
+- Layout: book at the origin; eras are stations along −z (`CONFIG.world.stations`). Ranges in
+  `CONFIG.ranges`: station i is closest at `stations.first + i·stations.step`; `settle`, `assemble`,
+  `explode` are relative to that.
+- QA tools (outside `site/`): `tools/seq.js` captures a continuity sequence and fast-scroll frames.
