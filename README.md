@@ -139,3 +139,26 @@ along the road between eras. Each prop kind is one `InstancedMesh` per material,
 few dozen draw calls. Era-specific sets are in `ERA_SETS`; station props scale in with their era. Smoke columns
 are a handful of soft sprites (`Props.addSmoke`). Map plates (`js/maps.js`) carry sea creatures, ships, rhumb
 lines, engraved relief, region names, corner rosettes and cartouche scroll-work, all drawn on canvas.
+
+## Terrain, haze & figures (v4)
+
+- `js/terrain.js`: `terrainH(x, z)` is a gentle value-noise relief, flat under the road and
+  every era, rising into soft hills further out, with a shallow river valley carved in.
+  The ground is one displaced mesh (88×300 segments, fewer on mobile); every prop sits on
+  `terrainH`. No more hill "blobs".
+- Three layers of far ridge silhouettes on each side (and across the end of the road) use a
+  tiny shader that mixes each layer further into the era's haze, with mist at their feet.
+- A sky dome follows the camera: era haze at the horizon, a soft glow that is brightest
+  where the road leads, a darker zenith. Per-era colours live in `CONFIG.atmos`
+  (`fog` = haze, `glow`, `top`, `key`); the fog uses the same haze colour, so distance
+  reads as atmospheric perspective.
+- Figures: proportioned (legs, torso, arms, head), one costume set per era (toga, peasant
+  tunic & hood, sailor with hat, frock coat & top hat, 20th-c. overcoat & cap, gowns) and
+  four poses (standing, walking, pointing, carrying). Cloth colour varies per instance.
+- Trees: canopies of several noise-displaced icosahedra in two tones; three tree variants,
+  poplars and pines. Houses: roof overhang, chimney, door, windows (some lit at dusk),
+  half-timbered and two-storey brick variants.
+- Cutaway: roofs and tops lift only a little (×0.34) and fade slightly; walls part ×0.8.
+- Medieval ashlar is darker and warmer, the key light warmer for that era.
+- Era surroundings gather slightly before the building assembles (no empty approach).
+- Reduced motion: the picture always follows the chapter closest to the viewport centre.
