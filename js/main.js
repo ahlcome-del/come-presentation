@@ -206,12 +206,25 @@ function setupStatic() {
       canvas.style.opacity = '1';
     }, 260);
   };
-  const io = new IntersectionObserver((entries) => {
-    for (const en of entries) if (en.isIntersecting) show(parseFloat(en.target.dataset.key));
-  }, { rootMargin: '-45% 0px -45% 0px' });
-  $$('.stage .chapter').forEach((ch) => io.observe(ch));
+  // the picture always follows the chapter whose centre is closest to the viewport centre,
+  // so a caption is never shown over the previous era's picture
   $('#bibliotheque').dataset.key = '0.95';
-  io.observe($('#bibliotheque'));
+  const chapters = [...$$('.stage .chapter'), $('#bibliotheque')];
+  let raf = 0;
+  const pick = () => {
+    raf = 0;
+    const mid = innerHeight / 2; let best = null, bd = Infinity;
+    for (const ch of chapters) {
+      const r = ch.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > innerHeight) continue;
+      const d = Math.abs((r.top + r.bottom) / 2 - mid);
+      if (d < bd) { bd = d; best = ch; }
+    }
+    if (best) show(parseFloat(best.dataset.key));
+  };
+  addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(pick); }, { passive: true });
+  addEventListener('resize', pick);
+  requestAnimationFrame(pick);
   scene.setProgress(.03);
 }
 

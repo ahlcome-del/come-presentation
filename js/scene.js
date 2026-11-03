@@ -21,6 +21,7 @@ import { PLATES, generateMaps } from './maps.js';
 import * as TX from './textures.js';
 import { buildDiorama, makeMaterials } from './dioramas.js';
 import { Props } from './props.js';
+import { buildTerrain, buildRidges, buildSky, setStations } from './terrain.js';
 
 /* =========================================================================
    CONFIG — colours, sizes, timings (scroll ranges in progress units)
@@ -34,12 +35,12 @@ export const CONFIG = {
     ground: 0x2b2621,
   },
   lights: { key: 2.1, rim: 2.2, hemi: .3, env: .26, exposure: .92 },
-  fog: { near: 7, far: 26 },
+  fog: { near: 5.5, far: 23 },
   dpr: { desktop: 2, mobile: 1.5, min: 1 },
   camera: { fov: 34 },
   parallax: { amount: .018, damping: .06 },
   adaptive: !/[?&]noadapt\b/.test(location.search),   // adaptive DPR (QA can disable)
-  book: { restY: -.72, w: 1.3, h: 1.8, t: .3, cover: .032, pages: { desktop: 48, mobile: 24 }, segments: { desktop: 24, mobile: 12 } },
+  book: { glow: 0x241d16, restY: -.72, w: 1.3, h: 1.8, t: .3, cover: .032, pages: { desktop: 48, mobile: 24 }, segments: { desktop: 24, mobile: 12 } },
   maps: { desktop: [2048, 1418], mobile: [1280, 886] },
   // scroll ranges (progress units). Station i is closest to the camera at stations.first + i·step
   ranges: {
@@ -70,11 +71,11 @@ export const CONFIG = {
   },
   // fog / background / key-light tint per era (very close to the page colour: a mood, not a colour cast)
   atmos: [
-    { fog: 0x1d1813, key: 0xffe2b8 },   // Antiquité: warm stone
-    { fog: 0x181816, key: 0xe9e2d2 },   // Moyen Âge: grey, cooler
-    { fog: 0x151a1b, key: 0xd9e2e4 },   // Grandes découvertes: sea air
-    { fog: 0x1c1712, key: 0xffd2a0 },   // XIXe: soot & lamplight
-    { fog: 0x1a1816, key: 0xf2e8d8 },   // XXe: pale, electric
+    { fog: 0x46382a, glow: 0x93683f, top: 0x17120d, key: 0xffd9a8 },   // Antiquité: warm dusk over stone
+    { fog: 0x3d382f, glow: 0x7a6b55, top: 0x141310, key: 0xffdfb6 },   // Moyen Âge: grey haze, warm low sun
+    { fog: 0x333d3f, glow: 0x6a7d75, top: 0x111517, key: 0xe2e6e2 },   // Grandes découvertes: sea air
+    { fog: 0x463527, glow: 0x93603a, top: 0x150f0b, key: 0xffcc96 },   // XIXe: soot & lamplight
+    { fog: 0x403a32, glow: 0x83745e, top: 0x14120f, key: 0xf6ead6 },   // XXe: pale, electric
   ],
   damping: 4.2,                 // scene progress glides to the scroll target: 1 − e^(−dt·k)
 };
@@ -188,7 +189,7 @@ export class StoryScene {
     this.inner = new THREE.PointLight(C.colors.spill, 0, 2.2, 1.8);
     scene.add(this.spill, this.inner);
 
-    this.camera = new THREE.PerspectiveCamera(C.camera.fov, 1, .05, 90);
+    this.camera = new THREE.PerspectiveCamera(C.camera.fov, 1, .08, 150);
     this.look = V3();
 
     // shared soft textures
@@ -300,12 +301,15 @@ export class StoryScene {
     const C = CONFIG, G = C.world.groundY;
     // stations
     this.stations = C.world.stations.map(([x, z], i) => ({ i, pos: V3(x, G, z) }));
-    // the ground: a very large dark sheet with a faint engraved graticule (fades into fog)
+    // the ground: soft noise relief (flat under the road and the eras), engraved map texture
+    setStations(this.stations.map((st) => st.pos));
     const gtex = this.tex(TX.makeGroundMap(this.mobile ? 512 : 1024));
-    gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping; gtex.repeat.set(3, 12);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(36, 144),
-      new THREE.MeshStandardMaterial({ map: gtex, color: 0x8a7c68, roughness: 1, metalness: 0, envMapIntensity: .2 }));
-    ground.rotation.x = -Math.PI / 2; ground.position.set(0, G - .002, -40);
+    gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping; gtex.repeat.set(4.4, 16);
+    const ground = buildTerrain({ groundY: G, mobile: this.mobile,
+      material: new THREE.MeshStandardMaterial({ map: gtex, bumpMap: gtex, bumpScale: 1.2, color: 0x9a8a72, roughness: 1, metalness: 0, envMapIntensity: .2 }) });
+    // far ridges + sky dome: layered silhouettes fading into the era's haze
+    this.ridges = buildRidges({ groundY: G }); this.scene.add(this.ridges);
+    this.sky = buildSky(); this.scene.add(this.sky);
     this.worldGround = ground; this.scene.add(ground);
 
     // dashed route linking the book to every station (flat ribbon on the ground)
@@ -318,14 +322,14 @@ export class StoryScene {
         const nx = -tg.z, nz = tg.x, l = Math.hypot(nx, nz) || 1;
         pos.push(p.x + nx / l * w, 0, p.z + nz / l * w, p.x - nx / l * w, 0, p.z - nz / l * w);
         uv.push(u * rep, 0, u * rep, 1);
-        if (i < n) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+        if (i < n) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
       return g;
     };
     const roadTex = this.tex(TX.makeRoad()); roadTex.wrapS = THREE.RepeatWrapping;
-    this.road = new THREE.Mesh(mkRibbon(.14, 260), new THREE.MeshBasicMaterial({ map: roadTex, transparent: true, opacity: .55, depthWrite: false, fog: true }));
+    this.road = new THREE.Mesh(mkRibbon(.14, 260), new THREE.MeshBasicMaterial({ map: roadTex, color: 0xe0cfb0, transparent: true, opacity: .26, depthWrite: false, fog: true }));
     this.road.position.y = G + .003; this.road.renderOrder = 1; this.scene.add(this.road);
     const n = 400, w = .012, pos = [], uv = [];
     for (let i = 0; i <= n; i++) {
@@ -335,13 +339,13 @@ export class StoryScene {
       uv.push(u * 180, 0, u * 180, 1);
     }
     const idx = [];
-    for (let i = 0; i < n; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    for (let i = 0; i < n; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
     const rg = new THREE.BufferGeometry();
     rg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     rg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     rg.setIndex(idx);
     const dash = this.tex(TX.makeDash(), false); dash.wrapS = THREE.RepeatWrapping;
-    this.route = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ map: dash, color: 0xb9a888, transparent: true, opacity: .55, depthWrite: false }));
+    this.route = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ map: dash, color: 0x5a4a38, transparent: true, opacity: .55, depthWrite: false }));
     this.route.renderOrder = 1;
     this.scene.add(this.route);
 
@@ -357,6 +361,8 @@ export class StoryScene {
     this.dioramas = this.stations.map((s, i) => {
       const b = buildDiorama(i, M, this.shadowTex);
       b.station = s;
+      // roofs & tops: a short, elegant lift with a slight fade (the cutaway reads as intentional)
+      for (const it of b.parts) if (it.dir.y > .2) { it.lift = true; it.obj.material = it.obj.material.clone(); it.obj.material.transparent = true; }
       b.group.position.copy(s.pos).y += .05;
       b.group.visible = false;
       this.scene.add(b.group);
@@ -504,7 +510,11 @@ export class StoryScene {
     /* ----- plates, dioramas, atmosphere, camera ----- */
     this.updatePlates(p, t);
     this.updateDioramas(p, t);
-    this.props.update(p, t, this.assembleVals);
+    // the era's surroundings (figures, trees, carts…) gather a little before the building itself,
+    // so the approach to every era is never an empty sheet
+    const pre = this._pre || (this._pre = []);
+    this.assembleVals.forEach((a, i) => { const sp = this.stationP(i); pre[i] = Math.max(a, smootherstep(sp - .085, sp - .02, p)); });
+    this.props.update(p, t, pre);
     this.updateAtmosphere(p);
     this.updateCamera(p, t);
   }
@@ -598,7 +608,8 @@ export class StoryScene {
         it.obj.visible = aj > 0;
         if (!it.obj.visible) continue;
         const off = 1 - k;
-        it.obj.position.copy(it.base).addScaledVector(it.dir, e);
+        it.obj.position.copy(it.base).addScaledVector(it.dir, e * (it.lift ? .34 : .8));
+        if (it.lift) it.obj.material.opacity = 1 - .32 * e;
         if (off > 0) {
           const bx = it.base.x, bz = it.base.z, l = Math.hypot(bx, bz) || 1;
           it.obj.position.x += bx / l * .22 * off;
@@ -625,15 +636,24 @@ export class StoryScene {
     const x = clamp((p - sp0 + step * .5) / step, 0, A.length - 1);       // continuous era index
     const i = Math.floor(x), f = smooth(x - i);
     const a = A[i], b = A[Math.min(A.length - 1, i + 1)];
-    const into = smootherstep(sp0 - .1, sp0 - .02, p);                     // from neutral book light into the eras
-    const fog = this._fog || (this._fog = new THREE.Color());
-    fog.setHex(a.fog).lerp(_c1.setHex(b.fog), f);
-    fog.lerp(_c1.setHex(C.colors.bg), 1 - into);
-    this.scene.fog.color.copy(fog); this.scene.background.copy(fog);
+    const into = smootherstep(.27, sp0 - .03, p);                           // from the dark study into the open landscape
+    const mixC = (key, out) => out.setHex(a[key]).lerp(_c1.setHex(b[key]), f);
+    const haze = this._haze || (this._haze = new THREE.Color()), glow = this._glow || (this._glow = new THREE.Color()), top = this._top || (this._top = new THREE.Color());
+    mixC('fog', haze).lerp(_c1.setHex(C.colors.bg), 1 - into);
+    mixC('glow', glow).lerp(_c1.setHex(C.book.glow), 1 - into);
+    mixC('top', top).lerp(_c1.setHex(C.colors.bg), 1 - into);
+    this.scene.fog.color.copy(haze); this.scene.background.copy(haze);
+    const dark = this._dark || (this._dark = new THREE.Color()); dark.copy(haze).multiplyScalar(.5);
+    const su = this.sky.material.uniforms;
+    su.uHaze.value.copy(haze); su.uGlow.value.copy(glow); su.uTop.value.copy(top);
+    this.camera.getWorldDirection(su.uDir.value); su.uDir.value.y = 0; su.uDir.value.normalize();
+    this.sky.position.copy(this.camera.position);
+    for (const m of this.ridges.userData.mats) { m.uniforms.uHaze.value.copy(haze); m.uniforms.uGlow.value.copy(glow); m.uniforms.uDark.value.copy(dark); }
+    this.ridges.visible = into > .01;
     this.key.color.setHex(a.key).lerp(_c1.setHex(b.key), f).lerp(_c1.setHex(C.colors.key), 1 - into);
     const lib = smootherstep(C.ranges.library[0], C.ranges.library[1], p);
-    this.scene.fog.near = lerp(C.fog.near, 16, lib);
-    this.scene.fog.far = lerp(C.fog.far, 62, lib);
+    this.scene.fog.near = lerp(C.fog.near, 14, lib);
+    this.scene.fog.far = lerp(C.fog.far, 58, lib);
   }
 
   /* ---------- camera: one CatmullRom spline for position, one for target ---------- */
