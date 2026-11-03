@@ -13,7 +13,7 @@
 import * as THREE from './vendor/three.js';
 import { mergeGeometries } from './vendor/three.js';
 import { bake } from './dioramas.js';
-import { terrainH, riverZ } from './terrain.js';
+import { terrainH, riverZ, HARB, inBasin } from './terrain.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
@@ -174,8 +174,16 @@ function kinds(mobile) {
     amphora: { foot: .025, parts: [[merged([new THREE.LatheGeometry([V(0, 0), V(.008, .002), V(.02, .03), V(.017, .055), V(.007, .065), V(.009, .075), V(0, .076)].map((v) => new THREE.Vector2(v.x, v.y)), 7)]), 'terracotta']] },
     rock: { foot: .08, parts: [[merged([ico(.06, 0, 0, .02, 0, 1.2, .6, 1), ico(.035, 0, .06, .01, .03, 1, .7, 1)]), 'stone']] },
     bench: { foot: .06, parts: [[merged([box(.12, .01, .035, 0, .03, 0), box(.12, .03, .006, 0, .05, -.016), box(.01, .03, .03, -.05, .015, 0), box(.01, .03, .03, .05, .015, 0)]), 'wood']] },
-    car: { foot: .1, parts: [[merged([box(.16, .04, .07, 0, .045, 0), box(.08, .04, .065, -.015, .085, 0)]), 'dark'],
-      [merged([0, 1, 2, 3].map((k) => cyl(.018, .018, .012, 10).rotateX(Math.PI / 2).translate(k < 2 ? -.05 : .05, .02, k % 2 ? .038 : -.038))), 'iron']] },
+    car: { foot: .1, parts: [[merged([box(.1, .045, .07, -.02, .045, 0), box(.07, .03, .06, .065, .04, 0), box(.07, .04, .064, -.03, .088, 0),          // body, bonnet, cabin
+      box(.075, .006, .07, -.03, .111, 0), box(.006, .028, .05, .1, .045, 0)]), 'dark'],
+      [merged([...[0, 1, 2, 3].map((k) => cyl(.019, .019, .012, 10).rotateX(Math.PI / 2).translate(k < 2 ? -.055 : .06, .02, k % 2 ? .04 : -.04)),
+        cyl(.022, .022, .074, 8, 0, 0, 0).rotateX(Math.PI / 2).scale(1, .45, 1).translate(-.055, .03, 0), cyl(.022, .022, .074, 8).rotateX(Math.PI / 2).scale(1, .45, 1).translate(.06, .03, 0),
+        box(.17, .004, .012, 0, .03, .04), box(.17, .004, .012, 0, .03, -.04)]), 'iron'],
+      [merged([box(.004, .025, .056, .006, .088, 0), box(.004, .025, .056, -.066, .088, 0), box(.004, .006, .012, .102, .05, .02), box(.004, .006, .012, .102, .05, -.02)]), 'glass']] },
+    bollard: { foot: .02, parts: [[merged([cyl(.011, .014, .035, 7, 0, .0175, 0), cyl(.015, .015, .008, 7, 0, .036, 0)]), 'iron']] },
+    crane: { foot: .15, parts: [[merged([box(.03, .34, .03, 0, .17, 0), box(.02, .02, .3, 0, .33, .12).rotateX(-.35), box(.12, .03, .12, 0, .015, 0), box(.008, .2, .008, 0, .24, .26),
+      new THREE.TorusGeometry(.07, .008, 4, 14).translate(-.04, .09, 0).rotateY(Math.PI / 2), new THREE.TorusGeometry(.07, .008, 4, 14).translate(.04, .09, 0).rotateY(Math.PI / 2)]), 'wood']] },
+    tower: { foot: .2, parts: [[merged([cyl(.11, .14, .62, 10, 0, .31, 0), cyl(.13, .13, .04, 10, 0, .64, 0)]), 'ashlar'], [merged([cyl(.06, .06, .07, 8, 0, .695, 0)]), 'glow'], [merged([new THREE.ConeGeometry(.09, .1, 8).translate(0, .78, 0)]), 'dark']] },
     pole: { foot: .03, parts: [[merged([cyl(.004, .006, .32, 4, 0, .16, 0), box(.09, .006, .006, 0, .3, 0)]), 'wood']] },
     well: { foot: .06, parts: [[merged([cyl(.04, .045, .05, 10, 0, .025, 0)]), 'ashlar'], [merged([box(.006, .09, .006, -.035, .07, 0), box(.006, .09, .006, .035, .07, 0), prism(.1, .03, .05).translate(0, .11, 0)]), 'wood']] },
       };
@@ -218,7 +226,7 @@ const ERA_SETS = [
   // XIXe industriel: gas lamps, terraces, telegraph poles, crates
   [['lamp', 5], ['brickHouse', 4], ['crate', 5], ['barrel', 4], ...F(3), ['pole', 3], ['cart', 1], ['tree3', 2]],
   // XXe: boulevard — lamps, clipped trees, benches, motorcars, flags
-  [['lamp', 6], ['topiary', 9], ...F(4), ['car', 2], ['bench', 3], ['banner', 3], ['poplar', 3]],
+  [['lamp', 6], ['topiary', 9], ...F(4), ['car', 4], ['bench', 3], ['banner', 3], ['poplar', 3]],
 ];
 
 export class Props {
@@ -245,6 +253,7 @@ export class Props {
             const big = /tree|olive|cypress|poplar|pine|house|House|banner|lamp|pole|topiary/.test(kind);
             if (big && z > S.z + .55) continue;                                   // nothing tall between lens and era
             if (Math.abs(x) < .45 && z > S.z) continue;                                       // the road itself
+            if (inBasin(x, z, .25)) continue;                                                // the harbour water
             // figures gather in small groups
             const fig = /^fig/.test(kind);
             add(kind, x, z, i, (fig ? 1.15 : 1.1) * (.9 + r() * .2));
@@ -262,7 +271,7 @@ export class Props {
     // trees & cypresses in loose clumps
     for (let k = 0; k < 150 * dens; k++) {
       const z = zStart - r() * (zStart - zEnd), x = sideX();
-      if (nearStation(x, z)) continue;
+      if (nearStation(x, z) || inBasin(x, z, .3)) continue;
       const era = Math.max(0, Math.min(4, Math.round((-z - 15) / 7)));
       const q = r(), tr = ['tree', 'tree2', 'tree3'][Math.floor(r() * 3)];
       const kind = era === 0 ? (q < .5 ? 'cypress' : q < .85 ? 'olive' : 'pine') : era === 4 ? (q < .35 ? 'poplar' : tr) : era === 2 ? (q < .35 ? 'pine' : q < .5 ? 'cypress' : tr) : (q < .15 ? 'cypress' : q < .3 ? 'poplar' : tr);
@@ -270,7 +279,7 @@ export class Props {
       if (r() < .5) add(kind, x + (r() - .5) * .5, z + (r() - .5) * .5, -1, .7 + r() * .5);
     }
     // rocks & small ruins
-    for (let k = 0; k < 45 * dens; k++) { const z = zStart - r() * (zStart - zEnd), x = sideX(); if (!nearStation(x, z)) add(r() < .8 ? 'rock' : 'ruin', x, z, -1, .8 + r() * .8); }
+    for (let k = 0; k < 45 * dens; k++) { const z = zStart - r() * (zStart - zEnd), x = sideX(); if (!nearStation(x, z) && !inBasin(x, z, .3)) add(r() < .8 ? 'rock' : 'ruin', x, z, -1, .8 + r() * .8); }
     // villages: a few houses around a well, between consecutive eras
     for (let i = 0; i < stations.length - 1; i++) {
       const zc = (stations[i].z + stations[i + 1].z) / 2, xc = -Math.sign(stations[i].x) * (3.4 + r() * 1.2);
@@ -289,7 +298,22 @@ export class Props {
       if (stations.some((S) => Math.abs(x - S.x) < 1.45 && Math.abs(z - S.z) < 1.05)) continue;
       if (Math.round(u / .016) % 3 === 0) add('milestone', x, z, -1, 1, Math.atan2(tg.x, tg.z));
     }
-    for (const p of place) p.y = terrainH(p.x, p.z);
+    /* the harbour beside the Discoveries: quay, three jetties, moored boats, cargo, crane, a light tower */
+    const QX = HARB.x + HARB.rx, piers = [-1.65, 0, 1.65].map((dz) => HARB.z + dz);
+    const harbour = [];
+    for (const pz of piers) {
+      for (const side of [-1, 1]) for (let k = 0; k < 2; k++) if (r() < .85) harbour.push(['boat', QX - .55 - k * .85 - r() * .2, pz + side * (.24 + r() * .05), -1, 1.5 + r() * .5, side > 0 ? Math.PI / 2 : -Math.PI / 2, 'water']);
+      harbour.push(['bollard', QX - .06, pz - .16, 2, 1.2], ['bollard', QX - .06, pz + .16, 2, 1.2]);
+    }
+    for (let k = 0; k < 4; k++) harbour.push(['boat', HARB.x - .6 + (r() - .5) * 2.2, HARB.z + (r() - .5) * 4.6, -1, 1.1 + r() * .4, r() * 6, 'water']);
+    harbour.push(['crane', QX + .25, HARB.z + 2.2, 2, 1.4, -Math.PI / 2], ['tower', HARB.x - HARB.rx + .3, HARB.z - HARB.rz - .2, -1, 1.5]);
+    const cargo = ['crate', 'crate', 'barrel', 'barrel', 'crate'];
+    for (let k = 0; k < 16; k++) { const z = HARB.z + (r() - .5) * 5.2; if (Math.abs(z - HARB.z) < 1.15) continue; harbour.push([cargo[k % 5], QX + .2 + r() * .6, z, 2, 1.1 + r() * .3]); }
+    for (let k = 0; k < 10; k++) { const z = HARB.z + (r() - .5) * 5.4; if (Math.abs(z - HARB.z) < 1.05) continue; harbour.push([`fig2${Math.floor(r() * 4)}`, QX + .15 + r() * .7, z, 2, 1.1, r() * 6]); }
+    // cargo and porters on the quay apron in front of the era (small, never hiding it)
+    for (let k = 0; k < 9; k++) { const kind = k < 5 ? cargo[k] : `fig2${k % 4}`; harbour.push([kind, HARB.x + HARB.rx + .1 + r() * 2.6, HARB.z + 1.25 + r() * 1.1, 2, 1.1 + r() * .3]); }
+    for (const [kind, x, z, st, sc, rot, water] of harbour) { add(kind, x, z, st, sc, rot ?? r() * 6); place[place.length - 1].water = !!water; }
+    for (const p of place) p.y = p.water ? -.075 : terrainH(p.x, p.z);
     this.place = place;
 
     /* build the instanced meshes */
@@ -335,6 +359,20 @@ export class Props {
     const bz = riverZ(0);
     const bridge = new THREE.Mesh(merged([box(.46, .03, .5, 0, .06, 0), box(.46, .05, .02, 0, .1, .24), box(.46, .05, .02, 0, .1, -.24), box(.06, .06, .5, -.2, .03, 0), box(.06, .06, .5, .2, .03, 0)]), M.ashlar);
     bridge.position.set(0, G, bz); bridge.rotation.y = Math.PI / 2; this.group.add(bridge);
+
+    /* harbour water, quay wall and jetties (static, merged) */
+    const hwm = M.water.clone(); hwm.color = new THREE.Color(0x7d8b88); hwm.roughness = .5; hwm.envMapIntensity = .5;
+    const hw = new THREE.Mesh(new THREE.PlaneGeometry(HARB.rx * 2 + .4, HARB.rz * 2 + .4).rotateX(-Math.PI / 2), hwm);
+    hw.geometry = bake(hw.geometry, false); hw.position.set(HARB.x - .1, G - .06, HARB.z); this.group.add(hw);
+    const quay = [box(.16, .16, HARB.rz * 2 + .3, QX + .02, -.035, 0), box(HARB.rx * 2 + .3, .16, .16, HARB.x - .1, -.035, -HARB.rz - .05), box(HARB.rx * 2 + .3, .16, .16, HARB.x - .1, -.035, HARB.rz + .05)]
+      .map((g) => g.translate(0, G, HARB.z));
+    this.group.add(new THREE.Mesh(merged(quay), M.ashlar));
+    const deck = [];
+    for (const pz of piers) {
+      deck.push(box(2.0, .018, .2, QX - 1.0, G + .03, pz));
+      for (let x = QX - .1; x > QX - 2.0; x -= .36) deck.push(cyl(.012, .014, .16, 5, x, G - .04, pz - .09), cyl(.012, .014, .16, 5, x, G - .04, pz + .09));
+    }
+    this.group.add(new THREE.Mesh(merged(deck), M.wood));
 
     /* smoke: soft billowing puffs from chimneys (a few sprites each) */
     this.smokeTex = smokeTex; this.smokes = [];

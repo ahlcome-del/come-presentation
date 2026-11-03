@@ -362,3 +362,37 @@ export function makeSmoke(size = 128, seed = 151) {
   }
   return cv;
 }
+
+/** a leather book spine: grain, gilt bands, a title label (tinted per instance) */
+export function makeSpine(seed = 161) {
+  const cv = canvas(64, 128), c = cv.getContext('2d'), r = rng(seed);
+  c.fillStyle = '#d8cfc2'; c.fillRect(0, 0, 64, 128);
+  for (let i = 0; i < 500; i++) { c.fillStyle = `rgba(${r() < .5 ? '60,40,30' : '255,245,230'},${r() * .12})`; c.fillRect(r() * 64, r() * 128, 1 + r() * 2, 1 + r() * 2); }
+  // raised bands + gilt rules
+  for (const y of [14, 30, 98, 114]) {
+    c.fillStyle = 'rgba(40,25,15,.35)'; c.fillRect(0, y + 3, 64, 2);
+    c.fillStyle = 'rgba(255,236,190,.85)'; c.fillRect(0, y, 64, 1.5); c.fillRect(0, y + 5, 64, 1);
+  }
+  // title label
+  c.fillStyle = 'rgba(30,18,10,.55)'; c.fillRect(6, 44, 52, 26);
+  c.fillStyle = 'rgba(255,232,180,.8)'; for (let k = 0; k < 2; k++) c.fillRect(14, 50 + k * 8, 36 - k * 10, 2.5);
+  // wear at the edges
+  const g = c.createLinearGradient(0, 0, 64, 0);
+  g.addColorStop(0, 'rgba(0,0,0,.35)'); g.addColorStop(.2, 'rgba(0,0,0,0)'); g.addColorStop(.8, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.35)');
+  c.fillStyle = g; c.fillRect(0, 0, 64, 128);
+  return cv;
+}
+
+/** an old wool rug: field, border, faded medallion */
+export function makeRug(seed = 171) {
+  const cv = canvas(512, 320), c = cv.getContext('2d'), r = rng(seed);
+  c.fillStyle = '#5a2620'; c.fillRect(0, 0, 512, 320);
+  c.strokeStyle = '#2c1712'; c.lineWidth = 22; c.strokeRect(16, 16, 480, 288);
+  c.strokeStyle = '#a07a4a'; c.lineWidth = 3; c.strokeRect(30, 30, 452, 260); c.strokeRect(8, 8, 496, 304);
+  for (let x = 40; x < 480; x += 18) { c.fillStyle = '#8a6a40'; c.fillRect(x, 13, 8, 6); c.fillRect(x, 301, 8, 6); }
+  c.save(); c.translate(256, 160); c.fillStyle = '#3a2a3a';
+  c.beginPath(); for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2, R = k % 2 ? 60 : 92; c.lineTo(Math.cos(a) * R * 1.4, Math.sin(a) * R * .8); } c.closePath(); c.fill();
+  c.fillStyle = '#9a7848'; c.beginPath(); c.ellipse(0, 0, 34, 22, 0, 0, Math.PI * 2); c.fill(); c.restore();
+  for (let i = 0; i < 2600; i++) { c.fillStyle = `rgba(${r() < .5 ? '0,0,0' : '255,230,200'},${r() * .1})`; c.fillRect(r() * 512, r() * 320, 2, 2); }
+  return cv;
+}

@@ -1,0 +1,155 @@
+/**
+ * Côme Presentation — the library at the end of the road.
+ *
+ * The journey ends where it began: among books. A warm panelled room of walnut shelves
+ * (one InstancedMesh for every book), a reading desk with a green banker's lamp, wall
+ * sconces with soft halos, a tall night window, a rug, a globe and a rolling ladder.
+ * Lamp light is baked into the books' instance colours (no extra real-time lights).
+ */
+import * as THREE from './vendor/three.js';
+import { mergeGeometries } from './vendor/three.js';
+import { bake } from './dioramas.js';
+import * as TX from './textures.js';
+
+const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+const cyl = (rt, rb, h, seg, x = 0, y = 0, z = 0) => new THREE.CylinderGeometry(rt, rb, h, seg).translate(x, y, z);
+const merged = (list) => { const g = mergeGeometries(list.map((x) => bake(x)), false); list.forEach((x) => x.dispose()); return g; };
+function rng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+
+const LEATHER = [0x7a2e22, 0x5c2a1e, 0x2f4a38, 0x24364a, 0x8a6a3e, 0x3a2a22, 0x6e4a2a, 0x4a1e1e, 0x5a5a3a, 0xa88a5a, 0x2a2420, 0x7e5a3a];
+
+export function buildLibrary({ M, radialTex, mobile, origin }) {
+  const group = new THREE.Group(); group.name = 'library'; group.position.copy(origin);
+  const r = rng(2024);
+  const H = 4.4, BAY = 1.0, SH = 10, D = .34, BACKZ = -3.2, SIDEX = 4.1, FRONTZ = 2.2;
+  const shelfY = (k) => .22 + k * .41;
+  const tex = (cv, rep = 1) => { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 4; return t; };
+  const walnut = M.wood.clone(); walnut.color = new THREE.Color(0x9a7a62);
+  const panel = M.wood.clone(); panel.color = new THREE.Color(0x6a5040);
+
+  // lamps (positions in room space) – used for the halos and the baked light on the books
+  const lamps = [];
+  const wood = [], panels = [], brass = [];
+
+  /* shelving bays: a list of frames { x, z, rotY } */
+  const bays = [];
+  for (let i = 0; i < 8; i++) { const x = -SIDEX + BAY / 2 + i * BAY; if (Math.abs(x) > .6) bays.push({ x, z: BACKZ, ry: 0 }); }
+  const sideN = mobile ? 3 : 5;
+  for (let i = 0; i < sideN; i++) { const z = BACKZ + BAY / 2 + .1 + i * BAY; bays.push({ x: -SIDEX, z, ry: Math.PI / 2 }, { x: SIDEX, z, ry: -Math.PI / 2 }); }
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3(), up = V(0, 1, 0);
+  const books = [];
+  for (const b of bays) {
+    const tr = (g) => g.rotateY(b.ry).translate(b.x, 0, b.z);
+    wood.push(tr(box(.06, H, D + .04, -BAY / 2, H / 2, 0)), tr(box(.06, H, D + .04, BAY / 2, H / 2, 0)));
+    for (let k = 0; k <= SH; k++) wood.push(tr(box(BAY, .035, D, 0, shelfY(k) - .02, 0)));
+    wood.push(tr(box(BAY + .08, .12, D + .1, 0, H + .02, .02)), tr(box(BAY + .04, .2, D + .06, 0, .1, .01)));    // cornice, plinth
+    panels.push(tr(box(BAY, H, .03, 0, H / 2, -D / 2)));
+    // books on every shelf
+    for (let k = 0; k < SH; k++) {
+      let x = -BAY / 2 + .05;
+      while (x < BAY / 2 - .08) {
+        if (r() < .06) { x += .04 + r() * .08; continue; }                          // a gap
+        const w = .028 + r() * .03, h = .25 + r() * .11, d = .2 + r() * .07;
+        const lean = r() < .05 ? (r() < .5 ? -1 : 1) * (.15 + r() * .2) : 0;
+        books.push({ b, x: x + w / 2, y: shelfY(k), w, h, d, lean, c: LEATHER[Math.floor(r() * LEATHER.length)], v: .75 + r() * .4 });
+        x += w + .002;
+      }
+    }
+  }
+  // sconces between back bays + over the side bays, and the desk lamp
+  for (const x of [-2.6, -1.1, 1.1, 2.6]) lamps.push({ p: V(x, 2.55, BACKZ + .12), s: 1 });
+  for (const z of [-1.6, .4]) { lamps.push({ p: V(-SIDEX + .12, 2.55, z), s: 1 }); lamps.push({ p: V(SIDEX - .12, 2.55, z), s: 1 }); }
+  lamps.push({ p: V(.55, 1.05, .55), s: 1.6 });                                      // banker's lamp
+
+  // books: one instanced mesh, lamp light baked into each colour
+  const spine = tex(TX.makeSpine());
+  const bookMat = new THREE.MeshStandardMaterial({ map: spine, roughness: .78, metalness: 0, envMapIntensity: .3 });
+  const bm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, .5, 0), bookMat, books.length);
+  const col = new THREE.Color(), wp = V();
+  books.forEach((k, j) => {
+    q.setFromAxisAngle(up, k.b.ry);
+    const lq = new THREE.Quaternion().setFromAxisAngle(V(0, 0, 1), k.lean);
+    p3.set(k.x, k.y, -D / 2 + .02 + k.d / 2).applyAxisAngle(up, k.b.ry).add(V(k.b.x, 0, k.b.z));
+    m4.compose(p3, q.clone().multiply(lq), s3.set(k.w, k.h, k.d));
+    bm.setMatrixAt(j, m4);
+    wp.copy(p3).y += k.h / 2;
+    let L = .45;
+    for (const l of lamps) L += l.s * .9 * Math.exp(-wp.distanceToSquared(l.p) / 1.1);
+    col.setHex(k.c).multiplyScalar(k.v * Math.min(1.6, L));
+    bm.setColorAt(j, col);
+  });
+  group.add(bm);
+
+  // the tall night window in the middle of the back wall
+  const win = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 3.2), new THREE.MeshBasicMaterial({ color: 0x31404c }));
+  win.position.set(0, 2.0, BACKZ - .12); group.add(win);
+  const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: 0x6f8090, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  moon.scale.set(1.6, 2.4, 1); moon.position.set(0, 2.6, BACKZ - .1); group.add(moon);
+  const extra = [{ h: moon, o: .55 }];
+  wood.push(box(.07, 3.3, .08, 0, 2.0, BACKZ - .08), box(1.2, .06, .08, 0, 1.4, BACKZ - .08), box(1.2, .06, .08, 0, 2.6, BACKZ - .08),
+    box(.08, 3.4, .14, -.62, 2.0, BACKZ - .06), box(.08, 3.4, .14, .62, 2.0, BACKZ - .06), box(1.32, .1, .16, 0, 3.66, BACKZ - .05), box(1.3, .08, .3, 0, .36, BACKZ));
+  panels.push(box(1.2, .4, .03, 0, .18, BACKZ - .1), box(1.4, H - 3.7, .03, 0, 3.7 + (H - 3.7) / 2, BACKZ - .1));
+
+  // floor, ceiling beams
+  const floorTex = tex(TX.makeWood({ color: '#4a3424', seed: 181, planks: 8 }), 4);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(SIDEX * 2 + .4, FRONTZ - BACKZ + 3).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: floorTex, bumpMap: floorTex, bumpScale: .8, roughness: .62, envMapIntensity: .4 }));
+  floor.position.set(0, .002, (FRONTZ + BACKZ) / 2 + 1); group.add(floor);
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.1).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: tex(TX.makeRug()), roughness: 1 }));
+  rug.position.set(0, .006, .3); group.add(rug);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(SIDEX * 2 + .4, FRONTZ - BACKZ + 3).rotateX(Math.PI / 2), panel);
+  ceil.geometry = bake(ceil.geometry, false);
+  ceil.position.set(0, H + .1, (FRONTZ + BACKZ) / 2 + 1); group.add(ceil);
+  for (let z = BACKZ + .6; z < FRONTZ + 1.5; z += 1.1) wood.push(box(SIDEX * 2, .16, .14, 0, H + .02, z));
+
+  // reading desk, chair, open book, banker's lamp, globe, ladder
+  wood.push(box(1.5, .05, .75, .1, .76, .55), box(.42, .7, .66, -.4, .38, .55), box(.42, .7, .66, .6, .38, .55));
+  wood.push(box(.42, .04, .42, .05, .46, 1.25), box(.42, .5, .04, .05, .72, 1.45));
+  for (const [x, z] of [[-.13, 1.07], [.23, 1.07], [-.13, 1.43], [.23, 1.43]]) wood.push(cyl(.018, .018, .46, 5, x, .23, z));
+  wood.push(box(.06, 3.8, .04, 1.62, 1.9, BACKZ + .32).rotateX(0), box(.06, 3.8, .04, 2.02, 1.9, BACKZ + .32));
+  for (let y = .3; y < 3.7; y += .32) wood.push(box(.44, .025, .03, 1.82, y, BACKZ + .32));
+  brass.push(cyl(.05, .07, .02, 10, .55, .79, .55), cyl(.008, .008, .2, 5, .55, .89, .55), cyl(.012, .012, .14, 6, .55, .9, .55), cyl(.21, .21, .006, 16, 3.0, .8, -1.1),
+    cyl(.012, .03, .78, 6, 3.0, .39, -1.1), cyl(.008, .008, .03, 4, 1.82, 3.9, BACKZ + .32));
+  for (const l of lamps.slice(0, -1)) brass.push(cyl(.012, .012, .2, 5, l.p.x, l.p.y - .16, l.p.z), box(.08, .14, .03, l.p.x, l.p.y - .3, l.p.z));
+  const shade = new THREE.Mesh(bake(new THREE.CylinderGeometry(.06, .14, .07, 14, 1, true, 0, Math.PI).rotateY(-Math.PI / 2).rotateX(-Math.PI / 2).translate(.55, 1.01, .55)),
+    new THREE.MeshStandardMaterial({ color: 0x1f4a32, roughness: .3, emissive: 0x0d2a1a, emissiveIntensity: .6, side: THREE.DoubleSide, vertexColors: true }));
+  group.add(shade);
+  const page = new THREE.MeshStandardMaterial({ color: 0xe9dfc8, roughness: .95, emissive: 0x2a1c0c, emissiveIntensity: .5 });
+  const openBook = new THREE.Mesh(merged([box(.24, .012, .3, -.12, .79, .5).rotateZ(.05), box(.24, .012, .3, .12, .79, .5).rotateZ(-.05)]), page);
+  openBook.position.x = -.05; group.add(openBook);
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(.2, 20, 14), M.sail.clone()); globe.material.color = new THREE.Color(0xcab48a);
+  globe.position.set(3.0, 1.0, -1.1); globe.rotation.z = .4; group.add(globe);
+  // outside: an ashlar shell with a slate roof — from the road the library reads as a
+  // building whose front has been cut away, like the era dioramas
+  const shell = [box(.3, H + .5, FRONTZ - BACKZ + .6, -SIDEX - .35, (H + .5) / 2, (FRONTZ + BACKZ) / 2), box(.3, H + .5, FRONTZ - BACKZ + .6, SIDEX + .35, (H + .5) / 2, (FRONTZ + BACKZ) / 2),
+    box(SIDEX * 2 + 1, H + .5, .3, 0, (H + .5) / 2, BACKZ - .35)];
+  for (const x of [-SIDEX - .35, SIDEX + .35]) shell.push(box(.5, H + .7, .5, x, (H + .7) / 2, FRONTZ + .2), box(.6, .25, .6, x, .12, FRONTZ + .2));    // corner piers
+  shell.push(box(SIDEX * 2 + 1.3, .3, FRONTZ - BACKZ + 1.1, 0, H + .55, (FRONTZ + BACKZ) / 2 + .05));                                   // entablature
+  const roofS = new THREE.Shape(); roofS.moveTo(-SIDEX - .8, 0); roofS.lineTo(SIDEX + .8, 0); roofS.lineTo(0, 1.5); roofS.closePath();
+  const roof = new THREE.ExtrudeGeometry(roofS, { depth: FRONTZ - BACKZ + 1.0, bevelEnabled: false }).translate(0, H + .7, BACKZ - .45);
+  group.add(new THREE.Mesh(merged(shell), M.ashlar), new THREE.Mesh(merged([roof]), M.dark));
+  group.add(new THREE.Mesh(merged(wood), walnut), new THREE.Mesh(merged(panels), panel), new THREE.Mesh(merged(brass), M.iron));
+
+  // glowing bulbs + soft halos (additive sprites, no real-time lights)
+  const bulbs = [];
+  lamps.forEach((l, i) => bulbs.push(new THREE.IcosahedronGeometry(i === lamps.length - 1 ? .03 : .045, 1).translate(l.p.x, l.p.y - (i === lamps.length - 1 ? .04 : .0), l.p.z)));
+  group.add(new THREE.Mesh(merged(bulbs), M.glow));
+  const halos = [];
+  lamps.forEach((l, i) => {
+    const desk = i === lamps.length - 1;
+    const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: desk ? 0xffb470 : 0xffa860, transparent: true, opacity: desk ? .5 : .36, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    const s = desk ? 1.5 : 1.15; h.scale.set(s, s, 1); h.position.copy(l.p); if (!desk) h.position.z += l.p.z === BACKZ + .12 ? .12 : 0;
+    group.add(h); halos.push({ h, o: h.material.opacity, ph: i * 1.7 });
+  });
+  // a warm pool of light on the desk and the floor
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: radialTex, color: 0x8a5a2a, transparent: true, opacity: .5, blending: THREE.AdditiveBlending, depthWrite: false }));
+  pool.position.set(.4, .012, .8); group.add(pool); extra.push({ h: pool, o: .5 });
+
+  // k: 0 far away (glows hidden, they ignore fog) → 1 on arrival
+  group.userData.flicker = (t, k = 1) => {
+    for (const x of halos) { x.h.visible = k > .01; x.h.material.opacity = k * x.o * (.94 + .06 * Math.sin(t * 2.3 + x.ph) * Math.sin(t * 3.7 + x.ph * 2)); }
+    for (const x of extra) { x.h.visible = k > .01; x.h.material.opacity = k * x.o; }
+  };
+  group.userData.flicker(0, 0);
+  return group;
+}

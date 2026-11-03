@@ -112,6 +112,9 @@ export function makeMaterials() {
     iron: mat('iron', .62, { metalness: .25, envMapIntensity: .55 }),
     mirror: new THREE.MeshStandardMaterial({ color: 0xcfc4ae, metalness: 1, roughness: .16, envMapIntensity: .8 }),
     glow: new THREE.MeshStandardMaterial({ color: 0x120a04, emissive: 0xffb56e, emissiveIntensity: 2.4, roughness: 1 }),
+    glowSoft: new THREE.MeshStandardMaterial({ color: 0x1a1208, emissive: 0xffc07a, emissiveIntensity: .9, roughness: .6 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0x3e4a50, roughness: .18, metalness: .5, envMapIntensity: 1.4, vertexColors: true, flatShading: true }),
+    flag: mat('terracotta', .9, { side: THREE.DoubleSide, color: 0xd28a70, bumpScale: .4 }),
   };
 }
 
@@ -322,44 +325,54 @@ function industrial(M, sh) {
   return b;
 }
 
-/* ======================= V. Early 20th c. — hall of mirrors ======================= */
+/* ======================= V. Early 20th c. — art-deco ministry (treaty hall inside) ======================= */
 function twentieth(M, sh) {
   const b = new Builder('twentieth', sh, M.stone);
-  const y0 = BASE_TOP, L = 1.5, Wd = .58, H = .42, t = .04, gy = y0 + .03;
-  b.fixed(box(L + .1, .03, Wd + .1, 0, y0 + .015, 0), M.marble);
-  // inlaid floor (stone squares)
-  const tiles = []; for (let x = -.66; x <= .66; x += .12) for (let z = -.22; z <= .22; z += .11) if ((Math.round(x / .12) + Math.round(z / .11)) % 2 === 0) tiles.push(box(.12, .004, .11, x, gy + .002, z));
-  b.fixed(tiles, M.stone);
-  // mirror wall (back) — piers + mirror arches
-  const back = [box(L, H, t, 0, gy + H / 2, -Wd / 2), box(L, .06, t + .02, 0, gy + H - .03, -Wd / 2 + .01)];
-  const mirrors = [];
-  for (let i = -3; i <= 3; i++) {
-    mirrors.push(box(.14, .26, .008, i * .2, gy + .17, -Wd / 2 + .024));
-    mirrors.push(cyl(.07, .07, .008, 12, 0, 0, 0).rotateX(Math.PI / 2).translate(i * .2, gy + .3, -Wd / 2 + .024));
+  const y0 = BASE_TOP, L = 1.36, D = .56, H = .34, t = .04, gy = y0 + .03;
+  b.fixed([box(L + .2, .03, D + .16, 0, y0 + .015, 0), box(.46, .014, .1, 0, gy + .007, D / 2 + .1), box(.38, .014, .07, 0, gy + .021, D / 2 + .085)], M.limestone);
+  // inlaid floor + treaty table + chairs
+  const tiles = []; for (let x = -.6; x <= .6; x += .12) for (let z = -.2; z <= .2; z += .1) if ((Math.round(x / .12) + Math.round(z / .1)) % 2 === 0) tiles.push(box(.12, .004, .1, x, gy + .002, z));
+  b.fixed(tiles, M.dark);
+  const tb = [box(.42, .016, .13, 0, gy + .1, 0), box(.02, .09, .02, -.18, gy + .045, 0), box(.02, .09, .02, .18, gy + .045, 0)];
+  for (let i = -2; i <= 2; i++) tb.push(box(.035, .06, .035, i * .08, gy + .03, -.11), box(.035, .06, .035, i * .08, gy + .03, .11));
+  b.fixed(tb, M.wood);
+  b.fixed(box(.07, .003, .05, 0, gy + .11, 0), M.sail);                                 // the treaty
+  // back & end walls with window bands
+  const pierRow = (n, len, z, alongX = true) => { const o = []; for (let i = 0; i <= n; i++) { const u = -len / 2 + len * i / n; o.push(alongX ? box(.034, H, t + .012, u, gy + H / 2, z) : box(t + .012, H, .034, z, gy + H / 2, u)); } return o; };
+  b.part([box(L, .05, t, 0, gy + .025, -D / 2), box(L, .05, t, 0, gy + H - .025, -D / 2), box(L, .022, t, 0, gy + .18, -D / 2), ...pierRow(10, L, -D / 2)], M.limestone, V(0, 0, -.18));
+  b.part(box(L - .02, H - .08, .01, 0, gy + H / 2, -D / 2 + .004), M.glass, V(0, 0, -.18));
+  for (const sx of [-1, 1]) {
+    b.part([box(t, .05, D, sx * L / 2, gy + .025, 0), box(t, .05, D, sx * L / 2, gy + H - .025, 0), box(t, .022, D, sx * L / 2, gy + .18, 0), ...pierRow(4, D, sx * L / 2, false)], M.limestone, V(sx * .13, 0, 0));
+    b.part(box(.01, H - .08, D - .02, sx * (L / 2 - .004), gy + H / 2, 0), M.glass, V(sx * .13, 0, 0));
   }
-  const dirBack = V(0, 0, -.22);
-  b.part(back, M.marble, dirBack); b.part(mirrors, M.mirror, dirBack.clone());
-  // window wall (front) — piers + lit windows
-  const piers = [box(L, .06, t, 0, gy + H - .03, Wd / 2), box(L, .05, t, 0, gy + .025, Wd / 2)];
-  for (let i = -4; i <= 4; i++) piers.push(box(.06, H, t, i * .2 - (i > 0 ? .0 : 0), gy + H / 2, Wd / 2));
-  // the window wall falls forward like a drawbridge to open the gallery
-  b.part(piers, M.marble, V(0, 0, .16), { tiltX: 1.2, pivot: V(0, gy, Wd / 2 + t / 2) });
-  // end walls
-  b.part(box(t, H, Wd, -L / 2, gy + H / 2, 0), M.marble, V(-.16, 0, 0));
-  b.part(box(t, H, Wd, L / 2, gy + H / 2, 0), M.marble, V(.16, 0, 0));
-  // barrel vault + cornice
-  const vault = new THREE.CylinderGeometry(Wd / 2 + .02, Wd / 2 + .02, L + .04, 18, 1, true, -Math.PI / 2, Math.PI).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(0, gy + H, 0);
-  const vm = M.marble.clone(); vm.side = THREE.DoubleSide;
-  b.part([vault, box(L + .06, .03, Wd + .06, 0, gy + H + .015, 0)], vm, V(0, .62, 0));
-  // chandeliers (glow) + treaty table
+  // front facade: piers, bands, glazing, central portal with canopy — falls forward to open
+  const pv = V(0, gy, D / 2 + t / 2), opt = { tiltX: .95, pivot: pv };
+  const front = [box(L, .05, t, 0, gy + .025, D / 2), box(L + .03, .045, t + .03, 0, gy + H - .02, D / 2 + .005), box(L, .022, t, 0, gy + .18, D / 2), ...pierRow(10, L, D / 2)];
+  front.push(box(.26, .27, .06, 0, gy + .135, D / 2 + .02), box(.32, .016, .1, 0, gy + .215, D / 2 + .05), box(.05, .14, .07, -.11, gy + H + .05, D / 2 + .01), box(.05, .14, .07, .11, gy + H + .05, D / 2 + .01));
+  b.part(front, M.limestone, V(0, 0, .14), opt);
+  b.part([box(L - .02, H - .08, .01, 0, gy + H / 2, D / 2 - .004), box(.13, .17, .012, 0, gy + .085, D / 2 + .052)], M.glass, V(0, 0, .14), opt);
+  const lit = []; for (const [x, y] of [[-.47, .1], [-.2, .26], [.34, .1], [.47, .26], [-.6, .26], [.2, .1]]) lit.push(box(.09, .06, .006, x, gy + y, D / 2 + .004));
+  b.part(lit, M.glowSoft, V(0, 0, .14), opt);
+  // roof slab + stepped central tower (setbacks), fins, flagpoles — the top lifts
+  const top = gy + H;
+  const tower = [box(L + .04, .025, D + .04, 0, top + .012, 0), box(.52, .14, .38, 0, top + .095, 0), box(.36, .12, .28, 0, top + .225, 0), box(.2, .1, .18, 0, top + .335, 0)];
+  for (const x of [-.12, -.06, 0, .06, .12]) tower.push(box(.02, .14, .012, x, top + .225, .146));
+  tower.push(cyl(.006, .01, .16, 6, 0, top + .465, 0));
+  for (const x of [-.6, .6]) tower.push(cyl(.004, .005, .28, 5, x, top + .15, D / 2 - .04));
+  b.part(tower, M.limestone, V(0, .5, 0));
+  b.part([box(.44, .09, .01, 0, top + .095, .192), box(.3, .07, .01, 0, top + .225, .142)], M.glass, V(0, .5, 0));
+  const flag = (x, y, z) => { const g = new THREE.PlaneGeometry(.1, .065, 4, 1), p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, Math.sin((p.getX(i) + .05) * 30) * .007); return g.translate(x + .05, y, z); };
+  b.part([flag(-.6, top + .25, D / 2 - .04), flag(.6, top + .25, D / 2 - .04)], M.flag, V(0, .5, 0));
+  // forecourt: flagpoles and lamps in front of the steps
+  b.fixed([cyl(.005, .007, .46, 5, -.52, gy + .23, D / 2 + .16), cyl(.005, .007, .46, 5, .52, gy + .23, D / 2 + .16), cyl(.02, .024, .02, 8, -.52, gy + .01, D / 2 + .16), cyl(.02, .024, .02, 8, .52, gy + .01, D / 2 + .16),
+    cyl(.004, .006, .2, 5, -.3, gy + .1, D / 2 + .2), cyl(.004, .006, .2, 5, .3, gy + .1, D / 2 + .2)], M.iron);
+  b.fixed([flag(-.52, gy + .42, D / 2 + .16), flag(.52, gy + .42, D / 2 + .16)], M.flag);
+  b.fixed([box(.022, .028, .022, -.3, gy + .21, D / 2 + .2), box(.022, .028, .022, .3, gy + .21, D / 2 + .2)], M.glow);
+  // chandeliers in the hall
   const ch = [];
-  for (const x of [-.45, 0, .45]) {
-    ch.push(new THREE.IcosahedronGeometry(.03, 0).translate(x, gy + .32, 0), cyl(.003, .003, .1, 3, x, gy + .39, 0));
-    for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; ch.push(new THREE.IcosahedronGeometry(.016, 0).translate(x + Math.cos(a) * .06, gy + .3, Math.sin(a) * .06)); }
-  }
-  b.part(ch, M.glow, V(0, .14, 0));
-  b.fixed([box(.26, .016, .1, 0, gy + .1, 0), box(.02, .09, .02, -.1, gy + .045, 0), box(.02, .09, .02, .1, gy + .045, 0)], M.wood);
-  b.interior.set(0, gy + .25, 0);
+  for (const x of [-.4, 0, .4]) { ch.push(new THREE.IcosahedronGeometry(.026, 0).translate(x, gy + .28, 0)); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; ch.push(new THREE.IcosahedronGeometry(.013, 0).translate(x + Math.cos(a) * .05, gy + .27, Math.sin(a) * .05)); } }
+  b.part(ch, M.glow, V(0, .12, 0));
+  b.interior.set(0, gy + .2, 0);
   return b;
 }
 
@@ -368,7 +381,8 @@ export const DIORAMA_BUILDERS = [antiquity, middleAges, discovery, industrial, t
 /** sort assembly order bottom → top (floors and walls first, roofs last) */
 function orderItems(b) {
   const box3 = new THREE.Box3();
-  for (const it of b.items) { it.obj.geometry.computeBoundingBox(); box3.copy(it.obj.geometry.boundingBox); it.y = box3.min.y + it.base.y + (it.obj.parent !== b.group ? it.obj.parent.position.y : 0); it.cy = (box3.min.y + box3.max.y) / 2; }
+  b.group.updateMatrixWorld(true);
+  for (const it of b.items) { box3.setFromObject(it.obj); it.y = box3.min.y; it.cy = (box3.min.y + box3.max.y) / 2; }
   b.items.sort((a, c) => a.y - c.y);
   b.items.forEach((it, j) => { it.order = j / Math.max(1, b.items.length - 1); });
 }

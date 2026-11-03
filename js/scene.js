@@ -22,6 +22,7 @@ import * as TX from './textures.js';
 import { buildDiorama, makeMaterials } from './dioramas.js';
 import { Props } from './props.js';
 import { buildTerrain, buildRidges, buildSky, setStations } from './terrain.js';
+import { buildLibrary } from './library3d.js';
 
 /* =========================================================================
    CONFIG — colours, sizes, timings (scroll ranges in progress units)
@@ -313,7 +314,7 @@ export class StoryScene {
     this.worldGround = ground; this.scene.add(ground);
 
     // dashed route linking the book to every station (flat ribbon on the ground)
-    const pts = [V3(0, G, 2), V3(0, G, -6), ...this.stations.map((s) => s.pos.clone().add(V3(-Math.sign(s.pos.x) * 1.35, 0, 0))), V3(0, G, -58)];
+    const pts = [V3(0, G, 2), V3(0, G, -6), ...this.stations.map((s) => s.pos.clone().add(V3(-Math.sign(s.pos.x) * 1.35, 0, 0))), V3(0, G, this.stations[this.stations.length - 1].pos.z - 8.5)];
     const curve = this.routeCurve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
     const mkRibbon = (w, rep) => {
       const n = 400, pos = [], uv = [], idx = [];
@@ -378,6 +379,10 @@ export class StoryScene {
     const local = (d, x, y, z) => (out) => { d.group.updateMatrixWorld(); return out.set(x, y, z).applyMatrix4(d.group.matrixWorld); };
     props.addSmoke(local(ind, -.62, 1.2, -.32), { n: 8, rise: 1.5, size: .75, opacity: .34, visible: () => this.assembleVals[3] });
     props.addSmoke(local(ind, .04, .44, .58), { n: 5, rise: .6, size: .32, opacity: .26, drift: .5, visible: () => this.assembleVals[3] });
+    // the library at the end of the road
+    this.libraryZ = this.stations[this.stations.length - 1].pos.z - 13;
+    this.library = buildLibrary({ M, radialTex: this.radialTex, mobile: this.mobile, origin: V3(0, G, this.libraryZ) });
+    this.scene.add(this.library);
     (props.villages || []).forEach((v) => props.addSmoke((out) => out.set(v.x + .1, v.y + .32, v.z), { n: 4, rise: .7, size: .35, opacity: .18 }));
   }
 
@@ -515,6 +520,8 @@ export class StoryScene {
     const pre = this._pre || (this._pre = []);
     this.assembleVals.forEach((a, i) => { const sp = this.stationP(i); pre[i] = Math.max(a, smootherstep(sp - .085, sp - .02, p)); });
     this.props.update(p, t, pre);
+    this.library.visible = p > .72;                                          // fully fogged before that
+    this.library.userData.flicker(t, smootherstep(.81, .87, p));
     this.updateAtmosphere(p);
     this.updateCamera(p, t);
   }
@@ -544,7 +551,8 @@ export class StoryScene {
       const u = EASE(range([R.unfold[0] + o, R.unfold[1] + o], p));          // open to double width
       const sp = this.stationP(k);
       const go = EASE_IO(range([R.toStation[0] + o, R.toStation[1] + o], p)); // fly on to the station
-      const settle = EASE_IO(range([sp + R.settle[0], sp + R.settle[1]], p)); // lie down on the ground
+      const sh = k > 0 ? .013 : 0;                                            // later eras: land & build a little sooner
+      const settle = EASE_IO(range([sp + R.settle[0] - sh, sp + R.settle[1] - sh], p)); // lie down on the ground
       const vis = (pl.fanF || 0) > 0 && p > R.riffle[0];
       pl.grp.visible = vis;
       if (!vis) return;
@@ -586,7 +594,7 @@ export class StoryScene {
     const focus = this.focus || (this.focus = []);
     this.dioramas.forEach((d, i) => {
       const sp = this.stationP(i);
-      const a = range([sp + R.assemble[0], sp + R.assemble[1]], p);           // 0..1 staged assembly
+      const a = range([sp + R.assemble[0] - (i > 0 ? .013 : 0), sp + R.assemble[1]], p);  // 0..1 staged assembly
       this.assembleVals[i] = a;
       d.group.visible = a > 0.001;
       this.stationShadows[i].material.opacity = .7 * smooth(clamp((a - .15) / .15));
@@ -652,8 +660,12 @@ export class StoryScene {
     this.ridges.visible = into > .01;
     this.key.color.setHex(a.key).lerp(_c1.setHex(b.key), f).lerp(_c1.setHex(C.colors.key), 1 - into);
     const lib = smootherstep(C.ranges.library[0], C.ranges.library[1], p);
-    this.scene.fog.near = lerp(C.fog.near, 14, lib);
-    this.scene.fog.far = lerp(C.fog.far, 58, lib);
+    this.scene.fog.near = lerp(C.fog.near, 9, lib);
+    this.scene.fog.far = lerp(C.fog.far, 34, lib);
+    if (lib > 0) {
+      this.scene.fog.color.lerp(_c1.setHex(0x1c140f), lib); this.scene.background.copy(this.scene.fog.color);
+      this.key.color.lerp(_c1.setHex(0xffc58e), lib);
+    }
   }
 
   /* ---------- camera: one CatmullRom spline for position, one for target ---------- */
@@ -680,11 +692,10 @@ export class StoryScene {
       K(sp, V3(S.x * .35, G + 1.7, S.z + 4.55), V3(S.x, G + .42, S.z));
       K(sp + .027, V3(-S.x * .25, G + 2.1, S.z + 3.1), V3(lerp(S.x, nxt.x, .55), G + .45, lerp(S.z, nxt.z, .55)));
     });
-    // library: rise and pull back, all eras small in the distance
-    const last = st[st.length - 1].pos;
-    const mid = (st[0].pos.z + last.z) / 2;
-    K(.9, V3(3.2, G + 6.2, last.z + 9), V3(-.6, G + .2, last.z + 1));
-    K(1, V3(10.5, G + 9.5, mid + 12), V3(0, G, mid - 1));
+    // library: down the last stretch of road and in through the open end of the room
+    const LZ = st[st.length - 1].pos.z - 13;
+    K(.9, V3(.2, G + 2.0, LZ + 12.5), V3(0, G + 1.3, LZ - 1));
+    K(1, V3(0, G + 1.45, LZ + 5.6), V3(0, G + 1.4, LZ - 2));
     this.camKeys = keys;
     this.camPos = new THREE.CatmullRomCurve3(keys.map((k) => k.pos), false, 'centripetal');
     this.camLook = new THREE.CatmullRomCurve3(keys.map((k) => k.look), false, 'centripetal');

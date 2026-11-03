@@ -161,7 +161,7 @@ function updateOverlays(p) {
   // library: the 3D becomes a blurred, dimmed backdrop
   const lb = EASE(clamp((p - .88) / .1));
   const canvas = $('#scene');
-  const f = lb > 0.001 ? `blur(${(lb * (MOBILE ? 5 : 8)).toFixed(2)}px) brightness(${(1 - lb * .45).toFixed(3)})` : '';
+  const f = lb > 0.001 ? `blur(${(lb * (MOBILE ? 1.6 : 2.4)).toFixed(2)}px) brightness(${(1 - lb * .2).toFixed(3)})` : '';
   if (canvas.style.filter !== f) canvas.style.filter = f;
   const fill = $('#progress-fill'); if (fill) fill.style.setProperty('--p', p.toFixed(4));
   const idx = p < .27 ? 0 : p < .4 ? 1 : p < .86 ? 2 : 3;
@@ -202,7 +202,7 @@ function setupStatic() {
     canvas.style.opacity = '0';
     setTimeout(() => {
       scene.setProgress(key);
-      canvas.style.filter = key > .9 ? 'blur(8px) brightness(.62)' : 'none';
+      canvas.style.filter = key > .9 ? 'blur(2.4px) brightness(.8)' : 'none';
       canvas.style.opacity = '1';
     }, 260);
   };

@@ -20,8 +20,11 @@ export function vnoise(x, y) {
 export function fbm(x, y, oct = 4) { let s = 0, a = .5, f = 1; for (let o = 0; o < oct; o++) { s += a * vnoise(x * f + o * 17.3, y * f - o * 9.1); f *= 2.03; a *= .5; } return s; }
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-let STATIONS = [], RIVER_Z = -25;
-export function setStations(list) { STATIONS = list; if (list.length > 2) RIVER_Z = (list[1].z + list[2].z) / 2 + .6; }
+let STATIONS = [], RIVER_Z = -25, LIB_Z = -56;
+export function setStations(list) { STATIONS = list; if (list.length > 2) RIVER_Z = (list[1].z + list[2].z) / 2 + .6; if (list.length) LIB_Z = list[list.length - 1].z - 13; if (list.length > 2) { HARB.x = list[2].x - 4.15; HARB.z = list[2].z; } }
+/** the harbour basin beside the Discoveries era (water below the quay) */
+export const HARB = { x: -6.25, z: -29, rx: 2.05, rz: 2.7 };
+export const inBasin = (x, z, m = 0) => Math.abs(x - HARB.x) < HARB.rx + m && Math.abs(z - HARB.z) < HARB.rz + m;
 /** the river's centre line (crosses the road between eras II and III) */
 export function riverZ(x) { return RIVER_Z + Math.sin(x * .32) * 1.0 + Math.sin(x * .13 + 1) * .8; }
 
@@ -33,7 +36,10 @@ export function terrainH(x, z) {
   const ripple = .06 * (fbm(x * .55, z * .55, 3) + .35) * flat;
   const hills = sstep(4.2, 11, Math.abs(x)) * (0.55 + fbm(x * .09 + 3, z * .07, 4) * .9) * (.6 + .4 * sstep(4, 14, Math.abs(x)));
   const rm = sstep(.25, 1.1, Math.abs(z - riverZ(x)));                  // carve a shallow river valley
-  return (Math.max(0, hills * 2.6) + ripple) * rm - .045 * (1 - rm);
+  const lib = sstep(0, 2.5, Math.max(Math.abs(x) - 5.2, z - (LIB_Z + 6.5), (LIB_Z - 4.2) - z));   // level ground under the library
+  const hb = sstep(0, .25, Math.max(Math.abs(x - HARB.x) - HARB.rx, Math.abs(z - HARB.z) - HARB.rz));  // sharp quay edge
+  const hb2 = sstep(0, 3, Math.max(Math.abs(x - HARB.x) - HARB.rx, Math.abs(z - HARB.z) - HARB.rz));  // hills ease off around it
+  return (((Math.max(0, hills * 2.6) * hb2 + ripple) * rm - .045 * (1 - rm)) * lib - .01 * (1 - lib)) * hb - .09 * (1 - hb);
 }
 
 /* ---------------- ground mesh ---------------- */
