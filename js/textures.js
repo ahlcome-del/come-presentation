@@ -289,28 +289,58 @@ export function addPaperFibre(ctx, w, h, seed = 101) {
 
 /** the dark world ground: worn paper with a faint engraved graticule & contour hatching */
 export function makeGroundMap(size = 1024, seed = 131) {
-  const cv = canvas(size, size), c = cv.getContext('2d'), r = rng(seed);
-  c.fillStyle = '#3a3229'; c.fillRect(0, 0, size, size);
-  cloudy(c, size, size, 6, .22, seed, '0,0,0', '120,100,75');
+  const cv = canvas(size, size), c = cv.getContext('2d'), r = rng(seed), k = size / 1024;
+  c.fillStyle = '#3d342a'; c.fillRect(0, 0, size, size);
+  cloudy(c, size, size, 6, .22, seed, '0,0,0', '130,108,80');
   cloudy(c, size, size, 22, .1, seed + 1);
-  c.strokeStyle = 'rgba(210,190,150,.16)'; c.lineWidth = size / 1024 * 1.4;
+  const ink = (a) => `rgba(214,195,155,${a})`;
+  // graticule
+  c.strokeStyle = ink(.14); c.lineWidth = 1.4 * k;
   const step = size / 4;
   for (let i = 0; i <= 4; i++) { c.beginPath(); c.moveTo(i * step, 0); c.lineTo(i * step, size); c.stroke(); c.beginPath(); c.moveTo(0, i * step); c.lineTo(size, i * step); c.stroke(); }
-  // faint "coastline" contours
-  c.strokeStyle = 'rgba(205,185,145,.10)'; c.lineWidth = size / 1024;
-  for (let k = 0; k < 6; k++) {
-    const cx = r() * size, cy = r() * size, R0 = size * (.08 + r() * .14);
-    for (let ring = 0; ring < 3; ring++) {
+  // relief: contour rings + engraved hill marks (little hatched mounds, as on old maps)
+  for (let h = 0; h < 7; h++) {
+    const cx = r() * size, cy = r() * size, R0 = size * (.05 + r() * .09);
+    c.strokeStyle = ink(.11); c.lineWidth = 1 * k;
+    for (let ring = 0; ring < 4; ring++) {
       c.beginPath();
       for (let a = 0; a <= 64; a++) {
-        const t = a / 64 * Math.PI * 2, rr = R0 * (1 + ring * .12) * (1 + .18 * Math.sin(t * 3 + k) + .1 * Math.sin(t * 7 + k * 2));
-        const x = cx + Math.cos(t) * rr, y = cy + Math.sin(t) * rr;
+        const t = a / 64 * Math.PI * 2, rr = R0 * (1 + ring * .28) * (1 + .16 * Math.sin(t * 3 + h) + .08 * Math.sin(t * 7 + h * 2));
+        const x = cx + Math.cos(t) * rr, y = cy + Math.sin(t) * rr * .8;
         a ? c.lineTo(x, y) : c.moveTo(x, y);
       }
       c.stroke();
     }
   }
+  for (let m = 0; m < 46; m++) {                     // hill marks ∩ with hatching on the shadow side
+    const x = r() * size, y = r() * size, w = (14 + r() * 22) * k, hh = w * (.45 + r() * .25);
+    c.strokeStyle = ink(.2); c.lineWidth = 1.1 * k;
+    c.beginPath(); c.moveTo(x - w / 2, y); c.quadraticCurveTo(x, y - hh * 2, x + w / 2, y); c.stroke();
+    c.strokeStyle = ink(.12); c.lineWidth = .8 * k;
+    for (let j = 1; j < 5; j++) { const xx = x + w * (.05 + j * .09); c.beginPath(); c.moveTo(xx, y - hh * (1 - j * .18)); c.lineTo(xx + 2 * k, y); c.stroke(); }
+  }
+  // small tree marks
+  for (let m = 0; m < 70; m++) {
+    const x = r() * size, y = r() * size, s = (3 + r() * 3) * k;
+    c.strokeStyle = ink(.16); c.lineWidth = .9 * k;
+    c.beginPath(); c.arc(x, y, s, 0, Math.PI * 2); c.stroke(); c.beginPath(); c.moveTo(x, y + s); c.lineTo(x, y + s * 1.8); c.stroke();
+  }
+  // a faint coastline / rhumb lines
+  c.strokeStyle = ink(.08); c.lineWidth = .8 * k;
+  const ox = size * .5, oy = size * .5;
+  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.beginPath(); c.moveTo(ox, oy); c.lineTo(ox + Math.cos(a) * size, oy + Math.sin(a) * size); c.stroke(); }
   grain(c, size, size, { amount: .12, seed: seed + 2 });
+  return cv;
+}
+
+/** the road: worn pale earth with two cart ruts (repeats along the ribbon) */
+export function makeRoad(seed = 141) {
+  const cv = canvas(128, 64), c = cv.getContext('2d'), r = rng(seed);
+  const g = c.createLinearGradient(0, 0, 0, 64);
+  g.addColorStop(0, 'rgba(160,140,110,0)'); g.addColorStop(.25, 'rgba(160,140,110,.75)'); g.addColorStop(.75, 'rgba(160,140,110,.75)'); g.addColorStop(1, 'rgba(160,140,110,0)');
+  c.fillStyle = g; c.fillRect(0, 0, 128, 64);
+  c.fillStyle = 'rgba(60,48,36,.35)'; c.fillRect(0, 22, 128, 3); c.fillRect(0, 40, 128, 3);
+  for (let i = 0; i < 160; i++) { c.fillStyle = `rgba(${r() < .5 ? '40,30,20' : '220,200,170'},${r() * .25})`; c.fillRect(r() * 128, 12 + r() * 40, 1.5, 1.5); }
   return cv;
 }
 
@@ -318,5 +348,17 @@ export function makeGroundMap(size = 1024, seed = 131) {
 export function makeDash() {
   const cv = canvas(64, 8), c = cv.getContext('2d');
   c.fillStyle = 'rgba(255,255,255,1)'; c.fillRect(0, 1, 34, 6);
+  return cv;
+}
+
+/** a soft, lumpy smoke puff (alpha in the canvas; tinted by the sprite colour) */
+export function makeSmoke(size = 128, seed = 151) {
+  const cv = canvas(size, size), c = cv.getContext('2d'), r = rng(seed);
+  for (let i = 0; i < 14; i++) {
+    const a = r() * Math.PI * 2, d = r() * size * .18, x = size / 2 + Math.cos(a) * d, y = size / 2 + Math.sin(a) * d, R = size * (.16 + r() * .16);
+    const g = c.createRadialGradient(x, y, 0, x, y, R);
+    g.addColorStop(0, 'rgba(255,255,255,.22)'); g.addColorStop(.6, 'rgba(255,255,255,.08)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, size, size);
+  }
   return cv;
 }

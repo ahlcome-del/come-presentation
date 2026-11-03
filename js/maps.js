@@ -45,6 +45,8 @@ export const PLATES = [
       [[23.6, 37.85], [24.6, 38.6], [26.0, 39.9], [26.6, 40.4], [28.98, 41.0]],
     ],
     labels: [['MARE INTERNVM', 18.5, 34.2, 1.0, -4], ['Oceanus', -8.0, 31.5, .8, -70]],
+    regions: [['ITALIA', 14.5, 43.2, -40], ['GRAECIA', 22.0, 39.6, -10], ['AEGYPTVS', 29.5, 28.6, 0], ['HISPANIA', -4.0, 40.0, 0], ['GALLIA', 3.0, 46.3, 0], ['AFRICA', 9.0, 33.0, 0], ['ASIA', 33.5, 39.0, 0]],
+    monsters: [['serpent', 6.2, 38.3, .9, 0], ['ship', 17.5, 36.0, .9, 0], ['ship', 27.5, 34.3, .7, 1], ['ship', -2.5, 35.9, .55, 1]],
     cartouche: 'bl',
   },
   {
@@ -59,13 +61,15 @@ export const PLATES = [
       [[3.0, 51.45], [1.6, 51.0], [-0.5, 50.4], [-5.2, 49.6], [-6, 47.5], [-4.5, 45.0], [-9.5, 43.2], [-9.6, 39], [-8.9, 37], [-6.2, 36.3]],
     ],
     labels: [['MARE GERMANICVM', 3.5, 56.2, .78, -8], ['Mare Mediterraneum', 6.0, 39.0, .8, -6], ['Oceanus Atlanticus', -8.5, 46.5, .78, -62]],
+    regions: [['FRANCIA', 2.5, 46.8, 0], ['ANGLIA', -1.6, 52.6, 0], ['IMPERIVM', 11.0, 51.5, 0], ['HISPANIA', -4.0, 40.3, 0], ['ITALIA', 13.0, 43.0, -40], ['POLONIA', 20.0, 52.2, 0], ['HVNGARIA', 19.5, 47.2, 0]],
+    monsters: [['whale', -15.5, 52.0, 1.0, 0], ['serpent', -13.5, 44.5, .9, 1], ['ship', 4.2, 54.1, .65, 0], ['ship', 4.0, 38.3, .7, 1]],
     cartouche: 'br',
   },
   {
     id: 'discovery', title: 'Mare Oceanum', sub: 'Routes atlantiques, XVe – XVIe siècle', data: 'countries-110m.json',
     projection: () => geoOrthographic().rotate([32, -8]).precision(0.2),
     sphere: true, step: 15,
-    markers: [['Lisboa', -9.14, 38.72], ['Sevilla', -5.98, 37.39], ['Santo Domingo', -69.9, 18.47], ['Cabo da Boa Esperança', 18.47, -34.36],
+    markers: [['Lisboa', -9.14, 38.72], ['Santo Domingo', -69.9, 18.47], ['Cabo da Boa Esperança', 18.47, -34.36],
       ['Salvador', -38.5, -12.97], ['Elmina', -1.35, 5.08]],
     routes: [
       [[-6.3, 36.6], [-16, 28.2], [-30, 22], [-50, 18], [-62, 16.8], [-69.9, 18.2]],
@@ -74,6 +78,8 @@ export const PLATES = [
       [[-24, 12], [-30, 0], [-38.3, -12.97]],
     ],
     labels: [['OCEANVS', -38, 30, 1.0, 0], ['Mare Aethiopicum', -12, -16, .8, 0]],
+    regions: [['AFRICA', 18, 8, 0], ['BRASIL', -50, -8, 0], ['EVROPA', 8, 47, 0]],
+    monsters: [['serpent', -40, 8, 1.1, 0], ['whale', -22, -26, 1.0, 1], ['ship', -48, 22, .9, 0], ['ship', -18, 2, .8, 1], ['ship', -3, -28, .7, 0]],
     cartouche: 'bl',
   },
   {
@@ -88,6 +94,8 @@ export const PLATES = [
       [[32.4, 31.4], [32.55, 29.8], [35.5, 25], [39, 18], [43.3, 12.6], [50.5, 11.6], [49.5, 5], [44, -1.5], [39.8, -6.6]],
     ],
     labels: [['OCEANVS ATLANTICVS', -12, -10, .8, -78], ['Mare Indicum', 46, -16, .8, -70]],
+    regions: [['SAHARA', 10, 23, 0], ['SVDAN', 24, 12, 0], ['CONGO', 21, -2, 0], ['KALAHARI', 22, -23, 0]],
+    monsters: [['whale', -6, -24, 1.0, 0], ['ship', -11, 2, .8, 0], ['serpent', 58, -6, .9, 1], ['ship', 46, -28, .7, 1]],
     cartouche: 'bl',
   },
   {
@@ -102,6 +110,8 @@ export const PLATES = [
     ],
     rail: true,
     labels: [['MARE BALTICVM', 18.6, 56.8, .7, -20], ['Mare Mediterraneum', 6.5, 39.2, .78, -6]],
+    regions: [['FRANCE', 2.0, 46.6, 0], ['ALLEMAGNE', 10.5, 51.0, 0], ['POLOGNE', 20.5, 51.6, 0], ['AVTRICHE', 14.3, 47.4, 0], ['ITALIE', 12.8, 43.1, -40], ['ROVMANIE', 25.2, 45.8, 0], ['ESPAGNE', -3.8, 40.3, 0]],
+    monsters: [['ship', -6.0, 49.0, .8, 0], ['ship', 4.5, 54.8, .7, 1], ['whale', -7.8, 56.5, .8, 0]],
     cartouche: 'br',
   },
 ];
@@ -174,6 +184,123 @@ function compass(ctx, x, y, r, sc) {
   ctx.restore();
 }
 
+
+/* ------------------------------------------------------------------ ink ornaments */
+/** a sea serpent: humped coils above little waterline strokes */
+function serpent(ctx, x, y, s, flip) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(flip ? -s : s, s);
+  ctx.strokeStyle = INK; ctx.fillStyle = '#e8dcc2'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const [x0, w, h] of [[-60, 34, 26], [-18, 30, 22], [20, 26, 18]]) {        // coils
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.bezierCurveTo(x0 + 2, -h, x0 + w - 2, -h, x0 + w, 0);
+    ctx.lineTo(x0 + w - 7, 0); ctx.bezierCurveTo(x0 + w - 9, -h + 9, x0 + 9, -h + 9, x0 + 7, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.lineWidth = 1; for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(x0 + w * k / 4, -h * .72); ctx.lineTo(x0 + w * k / 4 + 2, -h * .52); ctx.stroke(); } ctx.lineWidth = 2.2;
+  }
+  // head with open jaw and a fin crest
+  ctx.beginPath(); ctx.moveTo(-60, 0); ctx.bezierCurveTo(-64, -20, -70, -34, -82, -38); ctx.lineTo(-100, -34); ctx.lineTo(-88, -30); ctx.lineTo(-100, -24);
+  ctx.bezierCurveTo(-86, -24, -76, -18, -68, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(-83, -33, 1.6, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-70, -32); ctx.lineTo(-66, -44); ctx.lineTo(-62, -30); ctx.lineTo(-58, -40); ctx.lineTo(-56, -24); ctx.stroke();
+  // tail
+  ctx.beginPath(); ctx.moveTo(46, 0); ctx.bezierCurveTo(52, -12, 62, -14, 70, -6); ctx.lineTo(78, -14); ctx.lineTo(74, -2); ctx.stroke();
+  waterline(ctx, -110, 90);
+  ctx.restore();
+}
+/** a whale spouting */
+function whale(ctx, x, y, s, flip) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(flip ? -s : s, s);
+  ctx.strokeStyle = INK; ctx.fillStyle = '#e8dcc2'; ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-60, 0); ctx.bezierCurveTo(-60, -30, -20, -36, 18, -26); ctx.bezierCurveTo(40, -20, 52, -10, 60, -16);
+  ctx.lineTo(74, -30); ctx.lineTo(70, -12); ctx.lineTo(84, -6); ctx.lineTo(62, -4); ctx.lineTo(50, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.lineWidth = 1; for (let k = 0; k < 7; k++) { ctx.beginPath(); ctx.moveTo(-40 + k * 9, -6); ctx.lineTo(-36 + k * 9, -18 + Math.abs(k - 3) * 2); ctx.stroke(); }
+  ctx.beginPath(); ctx.arc(-42, -16, 1.8, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+  ctx.lineWidth = 1.6; ctx.beginPath();                                                 // spout
+  ctx.moveTo(-34, -32); ctx.bezierCurveTo(-36, -50, -48, -56, -54, -50); ctx.moveTo(-34, -32); ctx.bezierCurveTo(-32, -50, -20, -56, -14, -50);
+  ctx.moveTo(-34, -32); ctx.lineTo(-34, -56); ctx.stroke();
+  waterline(ctx, -76, 92);
+  ctx.restore();
+}
+/** a small sailing ship (caravel) with its wake */
+function ship(ctx, x, y, s, flip) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(flip ? -s : s, s);
+  ctx.strokeStyle = INK; ctx.fillStyle = '#e8dcc2'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(-40, -12); ctx.lineTo(36, -12); ctx.lineTo(28, 0); ctx.quadraticCurveTo(0, 4, -32, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-40, -12); ctx.lineTo(-40, -20); ctx.lineTo(-26, -20); ctx.lineTo(-26, -12); ctx.stroke();
+  for (const [mx, h, w] of [[-14, 52, 18], [8, 62, 22], [26, 36, 12]]) {
+    ctx.beginPath(); ctx.moveTo(mx, -12); ctx.lineTo(mx, -12 - h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mx - w / 2, -12 - h * .9); ctx.quadraticCurveTo(mx + w * .45, -12 - h * .6, mx - w / 2, -12 - h * .3); ctx.lineTo(mx + w / 2, -12 - h * .3);
+    ctx.quadraticCurveTo(mx + w * 1.1, -12 - h * .6, mx + w / 2, -12 - h * .9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(8, -74); ctx.lineTo(18, -70); ctx.lineTo(8, -66); ctx.fillStyle = ROUTE; ctx.fill();
+  waterline(ctx, -54, 60);
+  ctx.restore();
+}
+function waterline(ctx, x0, x1) {
+  ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(58,41,29,.7)';
+  for (let r = 0; r < 3; r++) {
+    ctx.beginPath();
+    for (let x = x0 + r * 6; x < x1 - r * 6; x += 12) { ctx.moveTo(x, 4 + r * 5); ctx.quadraticCurveTo(x + 3, 1 + r * 5, x + 6, 4 + r * 5); }
+    ctx.stroke();
+  }
+}
+/** portolan rhumb lines radiating from a wind rose */
+function rhumbs(ctx, x, y, L, sc) {
+  ctx.save(); ctx.lineWidth = .8 * sc;
+  for (let k = 0; k < 32; k++) {
+    const a = k * Math.PI / 16;
+    ctx.strokeStyle = k % 4 === 0 ? 'rgba(58,41,29,.16)' : k % 2 ? 'rgba(125,63,43,.10)' : 'rgba(58,41,29,.10)';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); ctx.stroke();
+  }
+  ctx.restore();
+}
+/** engraved mountain marks inside the land mask */
+function mountains(ctx, path, land, W, H, sc, seed) {
+  let s0 = seed * 7919 + 13; const rnd = () => ((s0 = (s0 * 16807) % 2147483647) / 2147483647);
+  ctx.save(); ctx.beginPath(); path(land);
+  const marks = [];
+  for (let i = 0; i < 900 && marks.length < 70; i++) {
+    const x = rnd() * W, y = rnd() * H;
+    if (!ctx.isPointInPath(x, y)) continue;
+    if (marks.some(([mx, my]) => Math.hypot(mx - x, my - y) < 46 * sc)) continue;
+    // keep marks off the coast: test 4 neighbours
+    const d = 30 * sc;
+    if (![[d, 0], [-d, 0], [0, d], [0, -d]].every(([ox, oy]) => ctx.isPointInPath(x + ox, y + oy))) continue;
+    marks.push([x, y]);
+  }
+  for (const [x, y] of marks) {
+    const w = (18 + rnd() * 14) * sc, h = w * (.55 + rnd() * .3);
+    ctx.beginPath(); ctx.moveTo(x - w / 2, y); ctx.quadraticCurveTo(x - w * .1, y - h * 1.3, x, y - h); ctx.quadraticCurveTo(x + w * .15, y - h * 1.1, x + w / 2, y);
+    ctx.fillStyle = 'rgba(235,224,199,.9)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(58,41,29,.55)'; ctx.lineWidth = 1.3 * sc; ctx.stroke();
+    ctx.lineWidth = .8 * sc; ctx.strokeStyle = 'rgba(58,41,29,.35)';
+    for (let k = 1; k < 5; k++) { const xx = x + w * (.02 + k * .1); ctx.beginPath(); ctx.moveTo(xx, y - h * (1 - k * .2)); ctx.lineTo(xx + 3 * sc, y - 1 * sc); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+/** corner rosette for the frame */
+function rosette(ctx, x, y, r, sc) {
+  ctx.save(); ctx.translate(x, y); ctx.strokeStyle = INK; ctx.fillStyle = PAPER; ctx.lineWidth = 1.2 * sc;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  for (let k = 0; k < 8; k++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.ellipse(0, -r * .5, r * .16, r * .42, 0, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.beginPath(); ctx.arc(0, 0, r * .16, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+  ctx.restore();
+}
+/** scroll-work either side of the cartouche */
+function scrolls(ctx, x0, y0, w, h, sc) {
+  ctx.save(); ctx.strokeStyle = INK; ctx.lineWidth = 1.6 * sc; ctx.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    const x = side < 0 ? x0 : x0 + w, cy = y0 + h / 2;
+    for (const dy of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(x, cy + dy * h * .32);
+      ctx.bezierCurveTo(x + side * 40 * sc, cy + dy * h * .42, x + side * 46 * sc, cy + dy * h * .08, x + side * 26 * sc, cy + dy * h * .1);
+      ctx.bezierCurveTo(x + side * 16 * sc, cy + dy * h * .12, x + side * 18 * sc, cy + dy * h * .24, x + side * 26 * sc, cy + dy * h * .22);
+      ctx.stroke();
+    }
+    ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + side * 18 * sc, cy); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + side * 22 * sc, cy, 3 * sc, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /* ------------------------------------------------------------------ plate */
 export function drawPlate(canvas, spec, world, index) {
   const W = canvas.width, H = canvas.height, sc = W / 2048;
@@ -229,6 +356,13 @@ export function drawPlate(canvas, spec, world, index) {
     ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
   }
 
+  // 1b) portolan rhumb lines from the wind rose
+  // the globe plate gets a large wind rose in the open paper on its left
+  const compX = spec.sphere ? ix0 + 290 * sc : spec.cartouche === 'br' ? ix0 + 120 * sc : ix1 - 120 * sc;
+  const compY = spec.sphere ? (iy0 + iy1) / 2 - 120 * sc : iy0 + 140 * sc;
+  const compR = spec.sphere ? 150 * sc : 70 * sc;
+  rhumbs(ctx, compX, compY, Math.hypot(W, H), sc);
+
   // 2) land
   ctx.beginPath(); path(land); ctx.fillStyle = LAND; ctx.fill();
   ctx.save(); ctx.beginPath(); path(land); ctx.clip();
@@ -245,8 +379,28 @@ export function drawPlate(canvas, spec, world, index) {
   ctx.beginPath(); path(grat);
   ctx.strokeStyle = 'rgba(58,41,29,.32)'; ctx.lineWidth = 1.2 * sc; ctx.stroke();
 
-  // 4) coastline
+  // 4) coastline (+ engraved relief inland)
+  mountains(ctx, path, land, W, H, sc, index + 1);
   ctx.beginPath(); path(land); ctx.strokeStyle = INK; ctx.lineWidth = 2.3 * sc; ctx.stroke();
+
+  // 4b) region names: spaced capitals in faded ink
+  for (const [t, lon, lat, rot] of spec.regions || []) {
+    const pr = projection([lon, lat]); if (!pr) continue;
+    if (spec.sphere && geoDistance([lon, lat], projection.invert(projection.translate())) > Math.PI / 2 - .2) continue;
+    ctx.save(); ctx.translate(pr[0], pr[1]); ctx.rotate(rot * Math.PI / 180);
+    ctx.font = `400 ${Math.round(24 * sc)}px "Source Serif 4", Georgia, serif`;
+    ctx.fillStyle = 'rgba(58,41,29,.5)'; ctx.textBaseline = 'middle';
+    spacedText(ctx, t, 0, 0, 9 * sc);
+    ctx.restore();
+  }
+
+  // 4c) sea creatures & ships, drawn in ink on the open sea
+  for (const [kind, lon, lat, size, flip] of spec.monsters || []) {
+    const pr = projection([lon, lat]); if (!pr) continue;
+    if (spec.sphere && geoDistance([lon, lat], projection.invert(projection.translate())) > Math.PI / 2 - .15) continue;
+    const f = { serpent, whale, ship }[kind];
+    f(ctx, pr[0], pr[1], size * 1.45 * sc, flip);
+  }
 
   // 5) routes
   ctx.save();
@@ -301,6 +455,8 @@ export function drawPlate(canvas, spec, world, index) {
     ctx.fillRect(fx0 + band - bw - 2 * sc, y, bw, h); ctx.fillRect(ix1 + 2 * sc, y, bw, h);
   }
 
+  for (const [x, y] of [[fx0, fy0], [fx1, fy0], [fx0, fy1], [fx1, fy1]]) rosette(ctx, x, y, band * 1.25, sc);
+
   // 9) cartouche
   const cw = 600 * sc, ch = 180 * sc;
   const cx0 = spec.cartouche === 'br' ? ix1 - cw - 34 * sc : ix0 + 34 * sc;
@@ -309,6 +465,7 @@ export function drawPlate(canvas, spec, world, index) {
   ctx.shadowColor = 'rgba(60,40,20,.18)'; ctx.shadowBlur = 18 * sc;
   ctx.fillStyle = '#ede3cc'; ctx.fillRect(cx0, cy0, cw, ch);
   ctx.restore();
+  scrolls(ctx, cx0, cy0, cw, ch, sc);
   ctx.lineWidth = 2.2 * sc; ctx.strokeStyle = INK; ctx.strokeRect(cx0, cy0, cw, ch);
   ctx.lineWidth = .9 * sc; ctx.strokeRect(cx0 + 8 * sc, cy0 + 8 * sc, cw - 16 * sc, ch - 16 * sc);
   ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
@@ -324,8 +481,7 @@ export function drawPlate(canvas, spec, world, index) {
   ctx.textAlign = 'left';
 
   // 10) compass rose + scale bar
-  const compX = spec.cartouche === 'br' ? ix0 + 120 * sc : ix1 - 120 * sc;
-  compass(ctx, compX, iy0 + 140 * sc, 70 * sc, sc);
+  compass(ctx, compX, compY, compR, sc);
   if (!spec.sphere) {
     const c = [(ix0 + ix1) / 2, (iy0 + iy1) / 2];
     const a = projection.invert([c[0] - 50, c[1]]), b = projection.invert([c[0] + 50, c[1]]);

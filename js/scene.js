@@ -20,6 +20,7 @@ import { RoomEnvironment } from './vendor/three.js';
 import { PLATES, generateMaps } from './maps.js';
 import * as TX from './textures.js';
 import { buildDiorama, makeMaterials } from './dioramas.js';
+import { Props } from './props.js';
 
 /* =========================================================================
    CONFIG — colours, sizes, timings (scroll ranges in progress units)
@@ -51,9 +52,9 @@ export const CONFIG = {
     unfold: [.255, .315],         // …and unfold to double width
     plateStagger: .011,
     toStation: [.355, .41],     // each plate glides ahead to hover over its station
-    settle: [-.05, -.022],      // …and lies down when the camera arrives (relative to station p)
-    assemble: [-.042, -.012],   // the era rises out of its map
-    explode: [-.012, .004, .014, .032],  // cutaway while the camera is closest
+    settle: [-.064, -.036],      // …and lies down when the camera arrives (relative to station p)
+    assemble: [-.046, -.008],    // the era rises out of its map (staged, bottom → top)
+    explode: [-.006, .008, .016, .034],  // cutaway while the camera is closest
     stations: { first: .46, step: .085 },
     library: [.86, .97],
   },
@@ -64,7 +65,7 @@ export const CONFIG = {
   },
   // the cloud of maps between the book and the first era: [x, y, z, rotY, rotZ, scale]
   cluster: {
-    wide: [[-.75, .7, -2.6, .38, .02, .5], [1.95, 1.3, -3.7, -.4, -.02, .52], [-.1, 1.75, -5.3, .14, .015, .5], [1.5, .1, -6.1, -.25, .02, .55], [-1.2, .05, -7.4, .3, -.02, .55]],
+    wide: [[1.7, .35, -2.5, -.36, .02, .46], [2.35, 1.35, -3.9, -.42, -.02, .5], [.15, -.1, -4.5, .08, .015, .5], [1.75, .05, -6.0, -.25, .02, .55], [-1.5, -.3, -6.9, .35, -.02, .55]],
     portrait: [[-.62, .95, -2.6, .3, .02, .36], [.72, 1.45, -3.7, -.3, -.02, .38], [-.3, 1.95, -5.3, .1, .015, .38], [.55, .2, -6.1, -.2, .02, .4], [-.8, .0, -7.4, .24, -.02, .4]],
   },
   // fog / background / key-light tint per era (very close to the page colour: a mood, not a colour cast)
@@ -303,14 +304,30 @@ export class StoryScene {
     const gtex = this.tex(TX.makeGroundMap(this.mobile ? 512 : 1024));
     gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping; gtex.repeat.set(3, 12);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(36, 144),
-      new THREE.MeshStandardMaterial({ map: gtex, color: 0x6e6252, roughness: 1, metalness: 0, envMapIntensity: .2 }));
+      new THREE.MeshStandardMaterial({ map: gtex, color: 0x8a7c68, roughness: 1, metalness: 0, envMapIntensity: .2 }));
     ground.rotation.x = -Math.PI / 2; ground.position.set(0, G - .002, -40);
     this.worldGround = ground; this.scene.add(ground);
 
     // dashed route linking the book to every station (flat ribbon on the ground)
     const pts = [V3(0, G, 2), V3(0, G, -6), ...this.stations.map((s) => s.pos.clone().add(V3(-Math.sign(s.pos.x) * 1.35, 0, 0))), V3(0, G, -58)];
-    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
-    const n = 400, w = .018, pos = [], uv = [];
+    const curve = this.routeCurve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    const mkRibbon = (w, rep) => {
+      const n = 400, pos = [], uv = [], idx = [];
+      for (let i = 0; i <= n; i++) {
+        const u = i / n, p = curve.getPointAt(u), tg = curve.getTangentAt(u);
+        const nx = -tg.z, nz = tg.x, l = Math.hypot(nx, nz) || 1;
+        pos.push(p.x + nx / l * w, 0, p.z + nz / l * w, p.x - nx / l * w, 0, p.z - nz / l * w);
+        uv.push(u * rep, 0, u * rep, 1);
+        if (i < n) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+      return g;
+    };
+    const roadTex = this.tex(TX.makeRoad()); roadTex.wrapS = THREE.RepeatWrapping;
+    this.road = new THREE.Mesh(mkRibbon(.14, 260), new THREE.MeshBasicMaterial({ map: roadTex, transparent: true, opacity: .55, depthWrite: false, fog: true }));
+    this.road.position.y = G + .003; this.road.renderOrder = 1; this.scene.add(this.road);
+    const n = 400, w = .012, pos = [], uv = [];
     for (let i = 0; i <= n; i++) {
       const u = i / n, p = curve.getPointAt(u), tg = curve.getTangentAt(u);
       const nx = -tg.z, nz = tg.x, l = Math.hypot(nx, nz) || 1;
@@ -345,6 +362,17 @@ export class StoryScene {
       this.scene.add(b.group);
       return b;
     });
+    this.assembleVals = this.dioramas.map(() => 0);
+
+    // props & landscape (instanced) + smoke columns
+    const smokeTex = this.tex(TX.makeSmoke(), true, false);
+    const props = this.props = new Props({ M, stations: this.stations.map((s) => s.pos), groundY: G, shadowTex: this.shadowTex, smokeTex, route: curve, mobile: this.mobile });
+    this.scene.add(props.group);
+    const ind = this.dioramas[3];
+    const local = (d, x, y, z) => (out) => { d.group.updateMatrixWorld(); return out.set(x, y, z).applyMatrix4(d.group.matrixWorld); };
+    props.addSmoke(local(ind, -.62, 1.2, -.32), { n: 8, rise: 1.5, size: .75, opacity: .34, visible: () => this.assembleVals[3] });
+    props.addSmoke(local(ind, .04, .44, .58), { n: 5, rise: .6, size: .32, opacity: .26, drift: .5, visible: () => this.assembleVals[3] });
+    (props.villages || []).forEach((v) => props.addSmoke((out) => out.set(v.x + .1, v.y + .32, v.z), { n: 4, rise: .7, size: .35, opacity: .18 }));
   }
 
   /* ---------- ground disc + soft contact shadow under the book ---------- */
@@ -476,6 +504,7 @@ export class StoryScene {
     /* ----- plates, dioramas, atmosphere, camera ----- */
     this.updatePlates(p, t);
     this.updateDioramas(p, t);
+    this.props.update(p, t, this.assembleVals);
     this.updateAtmosphere(p);
     this.updateCamera(p, t);
   }
@@ -547,32 +576,42 @@ export class StoryScene {
     const focus = this.focus || (this.focus = []);
     this.dioramas.forEach((d, i) => {
       const sp = this.stationP(i);
-      const a = EASE(range([sp + R.assemble[0], sp + R.assemble[1]], p));     // rises & assembles out of its map
+      const a = range([sp + R.assemble[0], sp + R.assemble[1]], p);           // 0..1 staged assembly
+      this.assembleVals[i] = a;
       d.group.visible = a > 0.001;
-      this.stationShadows[i].material.opacity = .7 * a;
+      this.stationShadows[i].material.opacity = .7 * smooth(clamp((a - .15) / .15));
       // cutaway: roof lifts, walls slide apart while the camera is closest
       const e = smootherstep(sp + R.explode[0], sp + R.explode[1], p) * (1 - smootherstep(sp + R.explode[2], sp + R.explode[3], p));
       d.explode = e;
       focus[i] = smootherstep(sp - .03, sp - .008, p) * (1 - smootherstep(sp + .012, sp + .034, p));
       if (!d.group.visible) return;
-      const s = Math.max(.001, lerp(.55, 1, a));
-      d.group.scale.setScalar(s);
+      // the stone base rises out of the map first…
+      const a0 = EASE(clamp(a / .22));
+      d.group.scale.setScalar(1);
       d.group.position.copy(d.station.pos);
-      d.group.position.y += .05 - (1 - a) * .25 + (this.reduced ? 0 : Math.sin(t * .55 + i * 1.3) * .006);
-      // turn the model to face the camera's passing line (+ a slow idle sway)
-      d.group.rotation.y = -Math.sign(d.station.pos.x) * .38 + (this.reduced ? 0 : Math.sin(t * .18 + i) * .06) + (1 - a) * .6;
-      const gather = 1 - a;                                    // parts fly in from an exploded cloud
-      for (let j = 0; j < d.parts.length; j++) {
-        const pt = d.parts[j];
-        pt.obj.position.copy(pt.base).addScaledVector(pt.dir, e + gather * 3.2);
-        pt.obj.position.y += gather * (1.1 + (j % 3) * .35);
-        if (pt.tilt) pt.obj.rotation.z = pt.tilt * e;
-        if (pt.tiltX) pt.obj.rotation.x = pt.tiltX * e;
+      d.group.position.y += lerp(-.13, .05, a0) + (this.reduced ? 0 : Math.sin(t * .55 + i * 1.3) * .006);
+      d.group.rotation.y = -Math.sign(d.station.pos.x) * .38 + (this.reduced ? 0 : Math.sin(t * .18 + i) * .06);
+      // …then every piece follows, bottom → top, rising on a short arc from below the map
+      for (const it of d.items) {
+        const aj = clamp((a - .12 - it.order * .5) / .38);
+        const k = aj >= 1 ? 1 : 1 - Math.pow(1 - aj, 3);
+        it.obj.visible = aj > 0;
+        if (!it.obj.visible) continue;
+        const off = 1 - k;
+        it.obj.position.copy(it.base).addScaledVector(it.dir, e);
+        if (off > 0) {
+          const bx = it.base.x, bz = it.base.z, l = Math.hypot(bx, bz) || 1;
+          it.obj.position.x += bx / l * .22 * off;
+          it.obj.position.z += bz / l * .22 * off;
+          it.obj.position.y += -.55 * off + Math.sin(Math.PI * k) * .06;
+        }
+        if (it.tilt) it.obj.rotation.z = it.tilt * e;
+        if (it.tiltX) it.obj.rotation.x = it.tiltX * e;
       }
       if (!this.reduced || e > 0) for (const fn of d.animators) fn(t);
       if (e > interiorBest) {
         interiorBest = e;
-        _v.copy(d.interior).multiplyScalar(s).applyAxisAngle(_v2.set(0, 1, 0), d.group.rotation.y).add(d.group.position);
+        _v.copy(d.interior).applyAxisAngle(_v2.set(0, 1, 0), d.group.rotation.y).add(d.group.position);
         this.inner.position.copy(_v);
       }
     });
@@ -610,7 +649,7 @@ export class StoryScene {
     K(.215, V3(0, 1.8, 7.0), V3(0, -.12, 0));
     // over the reclining open book, into the cloud of maps
     K(.275, V3(0, 2.25, 4.0), V3(0, .25, -2.6));
-    K(.315, V3(.2, 1.55, 1.2), V3(.5, .75, -5));
+    K(.315, V3(.3, 1.5, 1.2), V3(.75, .45, -5));
     K(.355, V3(.35, 1.05, -1.6), V3(.4, .5, -8));
     K(.395, V3(0, .45, -6.4), V3(st[0].pos.x * .5, G + .9, st[0].pos.z));
     // stations
@@ -619,7 +658,7 @@ export class StoryScene {
       const nxt = st[i + 1] ? st[i + 1].pos : V3(0, G, S.z - 9);
       K(sp - .03, V3(S.x * .2, G + 2.3, S.z + 6.0), V3(S.x, G + .5, S.z));
       K(sp, V3(S.x * .35, G + 1.7, S.z + 4.55), V3(S.x, G + .42, S.z));
-      K(sp + .027, V3(-S.x * .1, G + 2.0, S.z + 2.6), V3(lerp(S.x, nxt.x, .55), G + .45, lerp(S.z, nxt.z, .55)));
+      K(sp + .027, V3(-S.x * .25, G + 2.1, S.z + 3.1), V3(lerp(S.x, nxt.x, .55), G + .45, lerp(S.z, nxt.z, .55)));
     });
     // library: rise and pull back, all eras small in the distance
     const last = st[st.length - 1].pos;

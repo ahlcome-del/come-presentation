@@ -29,7 +29,7 @@ function prism(width, height, depth, alongX = false) {
 const UV_SCALE = 2.2; // texture tiles per world unit
 let _seed = 12345;
 const rnd = () => ((_seed = (_seed * 16807) % 2147483647) / 2147483647);
-function bake(geo, ao = true) {
+export function bake(geo, ao = true) {
   const g = geo.index ? geo.toNonIndexed() : geo;
   const useAO = ao ? (y, t) => .56 + .44 * t * t * (3 - 2 * t) : (y) => (y < 0 ? .78 : 1);
   const pos = g.attributes.position, n = pos.count, col = new Float32Array(n * 3);
@@ -88,6 +88,8 @@ export function makeMaterials() {
     brick: TX.makeBrick({ seed: 19 }),
     ashlar: TX.makeBrick({ rgb: [176, 160, 134], mortar: '#7d705f', rows: 8, cols: 4, vary: 26, seed: 23 }),
     iron: TX.makePaintedMetal({ seed: 21 }),
+    foliage: TX.makeStone({ color: '#5a5838', seed: 25, pores: 1.6 }),
+    bark: TX.makeWood({ color: '#4a3a2c', seed: 27, planks: 1 }),
   };
   // natural, matte, almost no metalness; env reflections kept low
   const mat = (key, roughness, extra = {}, rep = 1) => new THREE.MeshStandardMaterial({
@@ -105,6 +107,8 @@ export function makeMaterials() {
     water: mat('water', .42, { envMapIntensity: .7, bumpScale: 2 }, 2),
     brick: mat('brick', .93),
     ashlar: mat('ashlar', .94),
+    foliage: mat('foliage', .95, { bumpScale: 2.2 }),
+    bark: mat('bark', .92),
     iron: mat('iron', .62, { metalness: .25, envMapIntensity: .55 }),
     mirror: new THREE.MeshStandardMaterial({ color: 0xcfc4ae, metalness: 1, roughness: .16, envMapIntensity: .8 }),
     glow: new THREE.MeshStandardMaterial({ color: 0x120a04, emissive: 0xffb56e, emissiveIntensity: 2.4, roughness: 1 }),
@@ -116,6 +120,7 @@ class Builder {
   constructor(name, shadowTex, baseMat) {
     this.group = new THREE.Group(); this.group.name = name;
     this.parts = []; this.interior = V(0, .3, 0); this.animators = [];
+    this.items = [];   // every mesh except the base, in build order: used for the staged assembly
     const base = new THREE.Mesh(bake(new THREE.CylinderGeometry(1, 1.035, .1, 56), false), baseMat);
     this.group.add(base);
     const rim = new THREE.Mesh(bake(new THREE.TorusGeometry(1.0, .006, 4, 72), false), baseMat);
@@ -133,12 +138,15 @@ class Builder {
     const mesh = new THREE.Mesh(geo, mat);
     if (pivot) { geo.translate(-pivot.x, -pivot.y, -pivot.z); mesh.position.copy(pivot); }   // hinge for tiltX
     parent.add(mesh);
-    this.parts.push({ obj: mesh, dir, base: mesh.position.clone(), tilt, tiltX });
+    const it = { obj: mesh, dir, base: mesh.position.clone(), tilt, tiltX, part: true };
+    this.parts.push(it); this.items.push(it);
     return mesh;
   }
   fixed(geos, mat, parent = this.group) {
     const mesh = new THREE.Mesh(Array.isArray(geos) ? merge(geos) : bake(geos), mat);
-    parent.add(mesh); return mesh;
+    parent.add(mesh);
+    this.items.push({ obj: mesh, dir: V(), base: mesh.position.clone(), part: false });
+    return mesh;
   }
 }
 
@@ -357,6 +365,16 @@ function twentieth(M, sh) {
 
 export const DIORAMA_BUILDERS = [antiquity, middleAges, discovery, industrial, twentieth];
 
+/** sort assembly order bottom → top (floors and walls first, roofs last) */
+function orderItems(b) {
+  const box3 = new THREE.Box3();
+  for (const it of b.items) { it.obj.geometry.computeBoundingBox(); box3.copy(it.obj.geometry.boundingBox); it.y = box3.min.y + it.base.y + (it.obj.parent !== b.group ? it.obj.parent.position.y : 0); it.cy = (box3.min.y + box3.max.y) / 2; }
+  b.items.sort((a, c) => a.y - c.y);
+  b.items.forEach((it, j) => { it.order = j / Math.max(1, b.items.length - 1); });
+}
+
 export function buildDiorama(i, materials, shadowTex) {
-  return DIORAMA_BUILDERS[i](materials, shadowTex);
+  const b = DIORAMA_BUILDERS[i](materials, shadowTex);
+  orderItems(b);
+  return b;
 }
