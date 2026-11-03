@@ -78,7 +78,7 @@ html:not(.js) .loader { display: none; }
 .vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(8, 6, 5, .55) 100%); }
 .grain { position: absolute; inset: -60px; background-image: var(--noise); background-size: 140px; opacity: .05; animation: grain 1s steps(4) infinite; }
 @keyframes grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-23px, 17px); } 50% { transform: translate(19px, -31px); } 75% { transform: translate(-11px, -9px); } 100% { transform: translate(0, 0); } }
-.letterbox span { position: fixed; left: 0; right: 0; height: 9px; background: #0d0b09; z-index: 2; pointer-events: none; opacity: var(--lb, 0); transition: opacity .4s linear; }
+.letterbox span { position: fixed; left: 0; right: 0; height: 9px; background: #0d0b09; z-index: 2; pointer-events: none; opacity: var(--lb, 0); }
 .letterbox span:first-child { top: 0; } .letterbox span:last-child { bottom: 0; }
 
 /* ---------- Liquid glass component ---------- */
@@ -148,7 +148,7 @@ html.liquid .glass[data-liquid] {
 .progress.is-hidden { opacity: 0; pointer-events: none; }
 
 /* ---------- Voyage / pinned stage ---------- */
-.voyage { position: relative; height: 800vh; z-index: 3; }
+.voyage { position: relative; height: 1100vh; z-index: 3; }
 .stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; pointer-events: none; }
 .stage a, .stage button { pointer-events: auto; }
 .chapter { position: absolute; left: var(--gutter); right: var(--gutter); max-width: 980px; opacity: 0; visibility: hidden; }
@@ -169,10 +169,7 @@ html.liquid .glass[data-liquid] {
 .k { background: linear-gradient(100deg, #EEE6D4 0%, #D9C7A6 45%, #A8967C 100%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; text-shadow: none; padding-bottom: .06em; }
 .lede { margin: 22px 0 0; max-width: 34ch; font-size: clamp(1.05rem, 1.55vw, 1.4rem); font-weight: 300; line-height: 1.38; letter-spacing: -.01em; color: var(--ink-2); text-shadow: 0 1px 18px rgba(10, 8, 6, .7); }
 
-.scroll-cue { display: flex; align-items: center; gap: 14px; margin-top: 46px; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
-.scroll-cue__line { position: relative; width: 1px; height: 46px; background: var(--hairline); overflow: hidden; }
-.scroll-cue__line::after { content: ""; position: absolute; left: 0; top: 0; width: 1px; height: 40%; background: var(--ink); animation: cue 2.4s var(--ease) infinite; }
-@keyframes cue { 0% { transform: translateY(-100%); } 60%, 100% { transform: translateY(260%); } }
+
 
 /* Era caption chips (positioned under each diorama by js) */
 .chip {
@@ -249,8 +246,7 @@ html.static-mode .chapter--chip { min-height: 70vh; align-items: center; }
 html.static-mode .chapter--open, html.static-mode .chapter--maps, html.static-mode .chapter--eras { justify-content: flex-start; padding-top: calc(var(--nav-h) + 12vh); }
 html.static-mode .chapter--lib { display: none; }
 html.static-mode .chapter .rv { opacity: 1 !important; transform: none !important; filter: none !important; }
-html.static-mode .scroll-cue__line::after { animation: none; }
-html.static-mode .grain { animation: none; }
+html.static-mode html.static-mode .grain { animation: none; }
 html.static-mode .progress { display: none; }
 html.no-webgl #scene { display: none; }
 html.no-webgl .static-art { display: block; position: absolute; z-index: 0; right: 6vw; top: 50vh; width: min(44vw, 520px); transform: translateY(-50%); opacity: .95; }
