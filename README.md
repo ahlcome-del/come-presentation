@@ -130,3 +130,12 @@ All surfaces are matte and textured at runtime — no image files:
   `CONFIG.ranges`: station i is closest at `stations.first + i·stations.step`; `settle`, `assemble`,
   `explode` are relative to that.
 - QA tools (outside `site/`): `tools/seq.js` captures a continuity sequence and fast-scroll frames.
+
+## Props & landscape (v3)
+
+`js/props.js` places small maquette props (trees, cypresses, olive trees, figurines, houses, carts, crates,
+barrels, boats, lamps, banners, milestones, ruins, rocks, hills, a river with a bridge) around each era and
+along the road between eras. Each prop kind is one `InstancedMesh` per material, so the whole landscape is a
+few dozen draw calls. Era-specific sets are in `ERA_SETS`; station props scale in with their era. Smoke columns
+are a handful of soft sprites (`Props.addSmoke`). Map plates (`js/maps.js`) carry sea creatures, ships, rhumb
+lines, engraved relief, region names, corner rosettes and cartouche scroll-work, all drawn on canvas.
