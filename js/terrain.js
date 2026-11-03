@@ -21,7 +21,7 @@ export function fbm(x, y, oct = 4) { let s = 0, a = .5, f = 1; for (let o = 0; o
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 let STATIONS = [], RIVER_Z = -25, LIB_Z = -56;
-export function setStations(list) { STATIONS = list; if (list.length > 2) RIVER_Z = (list[1].z + list[2].z) / 2 + .6; if (list.length) LIB_Z = list[list.length - 1].z - 13; if (list.length > 2) { HARB.x = list[2].x - 4.15; HARB.z = list[2].z; } }
+export function setStations(list) { STATIONS = list; if (list.length > 2) RIVER_Z = (list[1].z + list[2].z) / 2 + .6; if (list.length) LIB_Z = list[list.length - 1].z - 20; if (list.length > 2) { HARB.x = list[2].x - 4.15; HARB.z = list[2].z; } }
 /** the harbour basin beside the Discoveries era (water below the quay) */
 export const HARB = { x: -6.25, z: -29, rx: 2.05, rz: 2.7 };
 export const inBasin = (x, z, m = 0) => Math.abs(x - HARB.x) < HARB.rx + m && Math.abs(z - HARB.z) < HARB.rz + m;

@@ -161,6 +161,9 @@ export class StoryScene {
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = C.lights.exposure;
     r.setClearColor(C.colors.bg, 1);
+    // one soft shadow map, only around the era in view (desktop; dropped on slow machines)
+    this.shadows = !this.mobile && !/[?&]noshadow/.test(location.search);
+    if (this.shadows) { r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap; }
     this.maxDpr = this.mobile ? C.dpr.mobile : C.dpr.desktop;
     this.dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr);
     r.setPixelRatio(this.dpr);
@@ -186,6 +189,13 @@ export class StoryScene {
     const hemi = new THREE.HemisphereLight(0xd9c7a6, 0x191613, C.lights.hemi);
     scene.add(key, rim, hemi);
     this.key = key;
+    if (this.shadows) {
+      key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+      const sc = key.shadow.camera; sc.left = -2.1; sc.right = 2.1; sc.top = 2.1; sc.bottom = -2.1; sc.near = .5; sc.far = 16;
+      key.shadow.bias = -.0006; key.shadow.normalBias = .015; key.shadow.radius = 3;
+      scene.add(key.target);
+    }
+    this._keyOff = V3(-5, 4.6, 3.6).normalize().multiplyScalar(8);          // low, raking from the left: shadows fall across the base
     this.spill = new THREE.PointLight(C.colors.spill, 0, 4.5, 1.6);
     this.inner = new THREE.PointLight(C.colors.spill, 0, 2.2, 1.8);
     scene.add(this.spill, this.inner);
@@ -314,7 +324,7 @@ export class StoryScene {
     this.worldGround = ground; this.scene.add(ground);
 
     // dashed route linking the book to every station (flat ribbon on the ground)
-    const pts = [V3(0, G, 2), V3(0, G, -6), ...this.stations.map((s) => s.pos.clone().add(V3(-Math.sign(s.pos.x) * 1.35, 0, 0))), V3(0, G, this.stations[this.stations.length - 1].pos.z - 8.5)];
+    const pts = [V3(0, G, 2), V3(0, G, -6), ...this.stations.map((s) => s.pos.clone().add(V3(-Math.sign(s.pos.x) * 1.35, 0, 0))), V3(0, G, this.stations[this.stations.length - 1].pos.z - 15)];
     const curve = this.routeCurve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
     const mkRibbon = (w, rep) => {
       const n = 400, pos = [], uv = [], idx = [];
@@ -357,6 +367,11 @@ export class StoryScene {
       this.scene.add(m); return m;
     });
 
+    // a soft pool of warm light on the ground under each era (museum spotlight, additive)
+    this.stationPools = this.stations.map((st, i) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 5.2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: this.radialTex, color: CONFIG.atmos[i].key, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      m.position.copy(st.pos).y += .012; m.renderOrder = 2; this.scene.add(m); return m;
+    });
     // all five dioramas, built now (a few ms each) — never created during scroll
     const M = this.dioMats = makeMaterials();
     this.dioramas = this.stations.map((s, i) => {
@@ -370,6 +385,11 @@ export class StoryScene {
       return b;
     });
     this.assembleVals = this.dioramas.map(() => 0);
+    if (this.shadows) {
+      for (const d of this.dioramas) d.group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      ground.receiveShadow = true;
+      (this.plates || []).forEach((pl) => pl.grp.traverse((o) => { if (o.isMesh) o.receiveShadow = true; }));
+    }
 
     // props & landscape (instanced) + smoke columns
     const smokeTex = this.tex(TX.makeSmoke(), true, false);
@@ -380,7 +400,7 @@ export class StoryScene {
     props.addSmoke(local(ind, -.62, 1.2, -.32), { n: 8, rise: 1.5, size: .75, opacity: .34, visible: () => this.assembleVals[3] });
     props.addSmoke(local(ind, .04, .44, .58), { n: 5, rise: .6, size: .32, opacity: .26, drift: .5, visible: () => this.assembleVals[3] });
     // the library at the end of the road
-    this.libraryZ = this.stations[this.stations.length - 1].pos.z - 13;
+    this.libraryZ = this.stations[this.stations.length - 1].pos.z - 20;
     this.library = buildLibrary({ M, radialTex: this.radialTex, mobile: this.mobile, origin: V3(0, G, this.libraryZ) });
     this.scene.add(this.library);
     (props.villages || []).forEach((v) => props.addSmoke((out) => out.set(v.x + .1, v.y + .32, v.z), { n: 4, rise: .7, size: .35, opacity: .18 }));
@@ -521,6 +541,7 @@ export class StoryScene {
     this.assembleVals.forEach((a, i) => { const sp = this.stationP(i); pre[i] = Math.max(a, smootherstep(sp - .085, sp - .02, p)); });
     this.props.update(p, t, pre);
     this.library.visible = p > .72;                                          // fully fogged before that
+    this.library.userData.setInside(smootherstep(.95, .975, p));
     this.library.userData.flicker(t, smootherstep(.81, .87, p));
     this.updateAtmosphere(p);
     this.updateCamera(p, t);
@@ -598,6 +619,7 @@ export class StoryScene {
       this.assembleVals[i] = a;
       d.group.visible = a > 0.001;
       this.stationShadows[i].material.opacity = .7 * smooth(clamp((a - .15) / .15));
+      this.stationPools[i].material.opacity = .11 * smooth(clamp(a / .4)); this.stationPools[i].visible = a > .001;
       // cutaway: roof lifts, walls slide apart while the camera is closest
       const e = smootherstep(sp + R.explode[0], sp + R.explode[1], p) * (1 - smootherstep(sp + R.explode[2], sp + R.explode[3], p));
       d.explode = e;
@@ -659,6 +681,12 @@ export class StoryScene {
     for (const m of this.ridges.userData.mats) { m.uniforms.uHaze.value.copy(haze); m.uniforms.uGlow.value.copy(glow); m.uniforms.uDark.value.copy(dark); }
     this.ridges.visible = into > .01;
     this.key.color.setHex(a.key).lerp(_c1.setHex(b.key), f).lerp(_c1.setHex(C.colors.key), 1 - into);
+    // the key light (and its shadow frustum) follows the era in view
+    if (this.shadows) {
+      const S = this.stations[clamp(Math.round((p - sp0) / step), 0, this.stations.length - 1)].pos;
+      _v.set(0, 0, 0).lerp(S, into);
+      this.key.target.position.copy(_v); this.key.position.copy(_v).add(this._keyOff);
+    }
     const lib = smootherstep(C.ranges.library[0], C.ranges.library[1], p);
     this.scene.fog.near = lerp(C.fog.near, 9, lib);
     this.scene.fog.far = lerp(C.fog.far, 34, lib);
@@ -688,14 +716,17 @@ export class StoryScene {
     st.forEach((s, i) => {
       const sp = this.stationP(i), S = s.pos, sg = Math.sign(S.x);
       const nxt = st[i + 1] ? st[i + 1].pos : V3(0, G, S.z - 9);
-      K(sp - .03, V3(S.x * .2, G + 2.3, S.z + 6.0), V3(S.x, G + .5, S.z));
+      // portrait, harbour: lean the approach towards the quay so the frame is never a bare disc
+      const hl = !wide && i === 2 ? 1.5 : 0;
+      K(sp - .03, V3(S.x * .2 - hl * .6, G + 2.3, S.z + 6.0), V3(S.x - hl, G + .5, S.z));
       K(sp, V3(S.x * .35, G + 1.7, S.z + 4.55), V3(S.x, G + .42, S.z));
       K(sp + .027, V3(-S.x * .25, G + 2.1, S.z + 3.1), V3(lerp(S.x, nxt.x, .55), G + .45, lerp(S.z, nxt.z, .55)));
     });
     // library: down the last stretch of road and in through the open end of the room
-    const LZ = st[st.length - 1].pos.z - 13;
-    K(.9, V3(.2, G + 2.0, LZ + 12.5), V3(0, G + 1.3, LZ - 1));
-    K(1, V3(0, G + 1.45, LZ + 5.6), V3(0, G + 1.4, LZ - 2));
+    const LZ = st[st.length - 1].pos.z - 20;
+    K(.9, V3(.25, G + 1.9, LZ + 11.5), V3(0, G + 1.45, LZ));
+    K(.955, V3(0, G + 1.62, LZ + 4.6), V3(0, G + 1.5, LZ - 1));               // at the foot of the steps, the doorway framed
+    K(1, V3(0, G + 1.66, LZ + 1.7), V3(0, G + 1.5, LZ - 3));                 // through the door, inside
     this.camKeys = keys;
     this.camPos = new THREE.CatmullRomCurve3(keys.map((k) => k.pos), false, 'centripetal');
     this.camLook = new THREE.CatmullRomCurve3(keys.map((k) => k.look), false, 'centripetal');
@@ -778,6 +809,8 @@ export class StoryScene {
     this._acc = (this._acc || 0) + dt; this._n = (this._n || 0) + 1;
     if (this._n < 90) return;
     const avg = this._acc / this._n; this._acc = 0; this._n = 0;
+    // slow: drop the shadow map first (one-off shader recompile), then resolution
+    if (avg > 1 / 40 && this.shadows) { this.shadows = false; this.key.castShadow = false; this.renderer.shadowMap.enabled = false; return; }
     // still slow at minimum resolution: ask the UI to drop the costly SVG refraction
     if (avg > 1 / 30 && this.dpr <= CONFIG.dpr.min && !this._slowSent) { this._slowSent = true; window.dispatchEvent(new CustomEvent('cp:slow')); }
     if (avg > 1 / 40 && this.dpr > CONFIG.dpr.min) { this.dpr = Math.max(CONFIG.dpr.min, this.dpr - .25); this.renderer.setPixelRatio(this.dpr); this.resize(); this.frame(); }

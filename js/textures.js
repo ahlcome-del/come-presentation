@@ -396,3 +396,12 @@ export function makeRug(seed = 171) {
   for (let i = 0; i < 2600; i++) { c.fillStyle = `rgba(${r() < .5 ? '0,0,0' : '255,230,200'},${r() * .1})`; c.fillRect(r() * 512, r() * 320, 2, 2); }
   return cv;
 }
+
+/** ploughed / sown field: furrow stripes (tinted per patch by vertex colour) */
+export function makeFurrows(seed = 201) {
+  const cv = canvas(128, 128), c = cv.getContext('2d'), r = rng(seed);
+  c.fillStyle = '#b8a888'; c.fillRect(0, 0, 128, 128);
+  for (let y = 0; y < 128; y += 8) { c.fillStyle = 'rgba(60,45,30,.35)'; c.fillRect(0, y, 128, 3); c.fillStyle = 'rgba(255,240,210,.12)'; c.fillRect(0, y + 4, 128, 1); }
+  for (let i = 0; i < 700; i++) { c.fillStyle = `rgba(${r() < .5 ? '50,40,25' : '240,225,190'},${r() * .14})`; c.fillRect(r() * 128, r() * 128, 1.5, 1.5); }
+  return cv;
+}

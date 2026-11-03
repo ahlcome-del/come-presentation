@@ -13,6 +13,7 @@
 import * as THREE from './vendor/three.js';
 import { mergeGeometries } from './vendor/three.js';
 import { bake } from './dioramas.js';
+import * as TX from './textures.js';
 import { terrainH, riverZ, HARB, inBasin } from './terrain.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -184,6 +185,10 @@ function kinds(mobile) {
     crane: { foot: .15, parts: [[merged([box(.03, .34, .03, 0, .17, 0), box(.02, .02, .3, 0, .33, .12).rotateX(-.35), box(.12, .03, .12, 0, .015, 0), box(.008, .2, .008, 0, .24, .26),
       new THREE.TorusGeometry(.07, .008, 4, 14).translate(-.04, .09, 0).rotateY(Math.PI / 2), new THREE.TorusGeometry(.07, .008, 4, 14).translate(.04, .09, 0).rotateY(Math.PI / 2)]), 'wood']] },
     tower: { foot: .2, parts: [[merged([cyl(.11, .14, .62, 10, 0, .31, 0), cyl(.13, .13, .04, 10, 0, .64, 0)]), 'ashlar'], [merged([cyl(.06, .06, .07, 8, 0, .695, 0)]), 'glow'], [merged([new THREE.ConeGeometry(.09, .1, 8).translate(0, .78, 0)]), 'dark']] },
+    windmill: { foot: .22, parts: [[merged([cyl(.09, .14, .5, 8, 0, .25, 0)]), 'limestone'], [merged([new THREE.ConeGeometry(.12, .14, 8).translate(0, .57, 0)]), 'dark'],
+      [merged([0, 1, 2, 3].map((k) => box(.035, .34, .006, 0, .17, 0).rotateZ(k * Math.PI / 2 + .3).translate(0, .52, .13)).concat([cyl(.012, .012, .06, 5).rotateX(Math.PI / 2).translate(0, .52, .11)])), 'wood']] },
+    chapel: { foot: .25, parts: [[merged([box(.26, .17, .16, 0, .085, 0), box(.09, .3, .09, -.15, .15, 0)]), 'limestone'], [merged([prism(.29, .12, .18).rotateY(Math.PI / 2).translate(0, .17, 0), new THREE.ConeGeometry(.075, .14, 4).rotateY(Math.PI / 4).translate(-.15, .37, 0)]), 'dark'],
+      [merged([box(.04, .07, .006, 0, .035, .081), box(.02, .04, .006, -.15, .22, .046)]), 'glowSoft']] },
     pole: { foot: .03, parts: [[merged([cyl(.004, .006, .32, 4, 0, .16, 0), box(.09, .006, .006, 0, .3, 0)]), 'wood']] },
     well: { foot: .06, parts: [[merged([cyl(.04, .045, .05, 10, 0, .025, 0)]), 'ashlar'], [merged([box(.006, .09, .006, -.035, .07, 0), box(.006, .09, .006, .035, .07, 0), prism(.1, .03, .05).translate(0, .11, 0)]), 'wood']] },
       };
@@ -265,13 +270,13 @@ export class Props {
     });
 
     /* landscape between the eras (always present, fades into the fog) */
-    const zStart = -7, zEnd = stations[stations.length - 1].z - 9;
+    const zStart = -7, zEnd = stations[stations.length - 1].z - 14, zLib = stations[stations.length - 1].z - 9;
     const sideX = () => (r() < .5 ? -1 : 1) * (.9 + Math.pow(r(), 1.2) * 5.5);
     const nearStation = (x, z) => stations.some((S) => Math.hypot(x - S.x, (z - S.z) / .85) < 3.2);
     // trees & cypresses in loose clumps
     for (let k = 0; k < 150 * dens; k++) {
       const z = zStart - r() * (zStart - zEnd), x = sideX();
-      if (nearStation(x, z) || inBasin(x, z, .3)) continue;
+      if (nearStation(x, z) || inBasin(x, z, .3) || (z < zLib && Math.abs(x) < 2.4)) continue;
       const era = Math.max(0, Math.min(4, Math.round((-z - 15) / 7)));
       const q = r(), tr = ['tree', 'tree2', 'tree3'][Math.floor(r() * 3)];
       const kind = era === 0 ? (q < .5 ? 'cypress' : q < .85 ? 'olive' : 'pine') : era === 4 ? (q < .35 ? 'poplar' : tr) : era === 2 ? (q < .35 ? 'pine' : q < .5 ? 'cypress' : tr) : (q < .15 ? 'cypress' : q < .3 ? 'poplar' : tr);
@@ -279,7 +284,7 @@ export class Props {
       if (r() < .5) add(kind, x + (r() - .5) * .5, z + (r() - .5) * .5, -1, .7 + r() * .5);
     }
     // rocks & small ruins
-    for (let k = 0; k < 45 * dens; k++) { const z = zStart - r() * (zStart - zEnd), x = sideX(); if (!nearStation(x, z) && !inBasin(x, z, .3)) add(r() < .8 ? 'rock' : 'ruin', x, z, -1, .8 + r() * .8); }
+    for (let k = 0; k < 45 * dens; k++) { const z = zStart - r() * (zStart - zEnd), x = sideX(); if (!nearStation(x, z) && !inBasin(x, z, .3) && !(z < zLib && Math.abs(x) < 2.4)) add(r() < .8 ? 'rock' : 'ruin', x, z, -1, .8 + r() * .8); }
     // villages: a few houses around a well, between consecutive eras
     for (let i = 0; i < stations.length - 1; i++) {
       const zc = (stations[i].z + stations[i + 1].z) / 2, xc = -Math.sign(stations[i].x) * (3.4 + r() * 1.2);
@@ -290,6 +295,11 @@ export class Props {
       for (let k = 0; k < 4; k++) add(`fig${Math.min(4, i + (k & 1))}${Math.floor(r() * 4)}`, xc + (r() - .5) * 1.2, zc + (r() - .5) * 1.2, -1, 1.05);
       this.villages = this.villages || []; this.villages.push(V(xc, G + terrainH(xc, zc), zc));
     }
+    // landmarks between the eras: a chapel, two windmills on the slopes
+    const gapZ = (i) => (stations[i].z + stations[i + 1].z) / 2;
+    add('chapel', 3.3, gapZ(0) - 1.2, -1, 1.3, -.4);
+    add('windmill', -4.6, gapZ(1) - 1.5, -1, 1.5, .5);
+    add('windmill', 4.3, gapZ(3) + 1.0, -1, 1.4, -.6);
     // milestones along the road
     if (route) for (let u = .04; u < .98; u += .016) {
       const p = route.getPointAt(u), tg = route.getTangentAt(u), side = (Math.round(u / .016) % 2) ? 1 : -1;
@@ -359,6 +369,30 @@ export class Props {
     const bz = riverZ(0);
     const bridge = new THREE.Mesh(merged([box(.46, .03, .5, 0, .06, 0), box(.46, .05, .02, 0, .1, .24), box(.46, .05, .02, 0, .1, -.24), box(.06, .06, .5, -.2, .03, 0), box(.06, .06, .5, .2, .03, 0)]), M.ashlar);
     bridge.position.set(0, G, bz); bridge.rotation.y = Math.PI / 2; this.group.add(bridge);
+
+    /* fields: a patchwork of ploughed and sown strips draped on the relief */
+    const fr = rng(seed + 99), fg = [], fieldTint = [[.4, .33, .24], [.32, .36, .22], [.46, .39, .26], [.3, .27, .2], [.37, .4, .26]];
+    const avoid = (x, z) => Math.abs(x) < .9 || nearStation(x, z) || inBasin(x, z, .4) || Math.abs(z - riverZ(x)) < .7 || z > -6;
+    for (let k = 0; k < (mobile ? 26 : 44); k++) {
+      const z = -7 - fr() * (stations[stations.length - 1].z * -1 - 2), x = (fr() < .5 ? -1 : 1) * (1.1 + fr() * 3.2);
+      const w = .8 + fr() * 1.3, d = .6 + fr() * 1.1, a = (fr() - .5) * .5;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const corners = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([u, v]) => [x + u * ca - v * sa, z + u * sa + v * ca]);
+      if (corners.some(([cx, cz]) => avoid(cx, cz)) || avoid(x, z)) continue;
+      const g = new THREE.PlaneGeometry(w, d, 6, 5).rotateX(-Math.PI / 2).rotateY(-a).translate(x, 0, z);
+      const pp = g.attributes.position;
+      for (let i = 0; i < pp.count; i++) pp.setY(i, G + terrainH(pp.getX(i), pp.getZ(i)) + .006);
+      const t = fieldTint[Math.floor(fr() * fieldTint.length)], cl = new Float32Array(pp.count * 3);
+      for (let i = 0; i < pp.count; i++) cl.set(t, i * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(cl, 3));
+      const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w * 1.5, uv.getY(i) * d * 1.5);
+      fg.push(g);
+    }
+    if (fg.length) {
+      const ftex = new THREE.CanvasTexture(TX.makeFurrows()); ftex.colorSpace = THREE.SRGBColorSpace; ftex.wrapS = ftex.wrapT = THREE.RepeatWrapping; ftex.anisotropy = 4;
+      const fm = new THREE.Mesh(mergeGeometries(fg, false), new THREE.MeshStandardMaterial({ map: ftex, vertexColors: true, roughness: 1, envMapIntensity: .15, transparent: true, opacity: .62, depthWrite: false }));
+      fm.renderOrder = 1; this.group.add(fm); fg.forEach((g) => g.dispose());
+    }
 
     /* harbour water, quay wall and jetties (static, merged) */
     const hwm = M.water.clone(); hwm.color = new THREE.Color(0x7d8b88); hwm.roughness = .5; hwm.envMapIntensity = .5;

@@ -20,7 +20,7 @@ function rng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 
 const LEATHER = [0x7a2e22, 0x5c2a1e, 0x2f4a38, 0x24364a, 0x8a6a3e, 0x3a2a22, 0x6e4a2a, 0x4a1e1e, 0x5a5a3a, 0xa88a5a, 0x2a2420, 0x7e5a3a];
 
 export function buildLibrary({ M, radialTex, mobile, origin }) {
-  const group = new THREE.Group(); group.name = 'library'; group.position.copy(origin);
+  const group = new THREE.Group(); group.name = 'library'; group.position.copy(origin); group.position.y += .27;   // the room stands on a stone podium
   const r = rng(2024);
   const H = 4.4, BAY = 1.0, SH = 10, D = .34, BACKZ = -3.2, SIDEX = 4.1, FRONTZ = 2.2;
   const shelfY = (k) => .22 + k * .41;
@@ -60,7 +60,7 @@ export function buildLibrary({ M, radialTex, mobile, origin }) {
   // sconces between back bays + over the side bays, and the desk lamp
   for (const x of [-2.6, -1.1, 1.1, 2.6]) lamps.push({ p: V(x, 2.55, BACKZ + .12), s: 1 });
   for (const z of [-1.6, .4]) { lamps.push({ p: V(-SIDEX + .12, 2.55, z), s: 1 }); lamps.push({ p: V(SIDEX - .12, 2.55, z), s: 1 }); }
-  lamps.push({ p: V(.55, 1.05, .55), s: 1.6 });                                      // banker's lamp
+  lamps.push({ p: V(.55, 1.05, -1.0), s: 1.6, desk: true });                                      // banker's lamp
 
   // books: one instanced mesh, lamp light baked into each colour
   const spine = tex(TX.makeSpine());
@@ -93,29 +93,29 @@ export function buildLibrary({ M, radialTex, mobile, origin }) {
 
   // floor, ceiling beams
   const floorTex = tex(TX.makeWood({ color: '#4a3424', seed: 181, planks: 8 }), 4);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(SIDEX * 2 + .4, FRONTZ - BACKZ + 3).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: floorTex, bumpMap: floorTex, bumpScale: .8, roughness: .62, envMapIntensity: .4 }));
-  floor.position.set(0, .002, (FRONTZ + BACKZ) / 2 + 1); group.add(floor);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(SIDEX * 2 + .4, FRONTZ - BACKZ + 1.2).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: floorTex, bumpMap: floorTex, bumpScale: .8, roughness: .62, envMapIntensity: .4 }));
+  floor.position.set(0, .002, (FRONTZ + BACKZ) / 2 + .1); group.add(floor);
   const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.1).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: tex(TX.makeRug()), roughness: 1 }));
-  rug.position.set(0, .006, .3); group.add(rug);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(SIDEX * 2 + .4, FRONTZ - BACKZ + 3).rotateX(Math.PI / 2), panel);
+  rug.position.set(0, .006, -.9); group.add(rug);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(SIDEX * 2 + .4, FRONTZ - BACKZ + 1.2).rotateX(Math.PI / 2), panel);
   ceil.geometry = bake(ceil.geometry, false);
-  ceil.position.set(0, H + .1, (FRONTZ + BACKZ) / 2 + 1); group.add(ceil);
-  for (let z = BACKZ + .6; z < FRONTZ + 1.5; z += 1.1) wood.push(box(SIDEX * 2, .16, .14, 0, H + .02, z));
+  ceil.position.set(0, H + .1, (FRONTZ + BACKZ) / 2 + .1); group.add(ceil);
+  for (let z = BACKZ + .6; z < FRONTZ + .3; z += 1.1) wood.push(box(SIDEX * 2, .16, .14, 0, H + .02, z));
 
   // reading desk, chair, open book, banker's lamp, globe, ladder
-  wood.push(box(1.5, .05, .75, .1, .76, .55), box(.42, .7, .66, -.4, .38, .55), box(.42, .7, .66, .6, .38, .55));
-  wood.push(box(.42, .04, .42, .05, .46, 1.25), box(.42, .5, .04, .05, .72, 1.45));
-  for (const [x, z] of [[-.13, 1.07], [.23, 1.07], [-.13, 1.43], [.23, 1.43]]) wood.push(cyl(.018, .018, .46, 5, x, .23, z));
+  wood.push(box(1.5, .05, .75, .1, .76, -1.0), box(.42, .7, .66, -.4, .38, -1.0), box(.42, .7, .66, .6, .38, -1.0));
+  wood.push(box(.42, .04, .42, .05, .46, -.3), box(.42, .5, .04, .05, .72, -.1));
+  for (const [x, z] of [[-.13, -.48], [.23, -.48], [-.13, -.12], [.23, -.12]]) wood.push(cyl(.018, .018, .46, 5, x, .23, z));
   wood.push(box(.06, 3.8, .04, 1.62, 1.9, BACKZ + .32).rotateX(0), box(.06, 3.8, .04, 2.02, 1.9, BACKZ + .32));
   for (let y = .3; y < 3.7; y += .32) wood.push(box(.44, .025, .03, 1.82, y, BACKZ + .32));
-  brass.push(cyl(.05, .07, .02, 10, .55, .79, .55), cyl(.008, .008, .2, 5, .55, .89, .55), cyl(.012, .012, .14, 6, .55, .9, .55), cyl(.21, .21, .006, 16, 3.0, .8, -1.1),
+  brass.push(cyl(.05, .07, .02, 10, .55, .79, -1.0), cyl(.008, .008, .2, 5, .55, .89, -1.0), cyl(.012, .012, .14, 6, .55, .9, -1.0), cyl(.21, .21, .006, 16, 3.0, .8, -1.1),
     cyl(.012, .03, .78, 6, 3.0, .39, -1.1), cyl(.008, .008, .03, 4, 1.82, 3.9, BACKZ + .32));
   for (const l of lamps.slice(0, -1)) brass.push(cyl(.012, .012, .2, 5, l.p.x, l.p.y - .16, l.p.z), box(.08, .14, .03, l.p.x, l.p.y - .3, l.p.z));
-  const shade = new THREE.Mesh(bake(new THREE.CylinderGeometry(.06, .14, .07, 14, 1, true, 0, Math.PI).rotateY(-Math.PI / 2).rotateX(-Math.PI / 2).translate(.55, 1.01, .55)),
+  const shade = new THREE.Mesh(bake(new THREE.CylinderGeometry(.06, .14, .07, 14, 1, true, 0, Math.PI).rotateY(-Math.PI / 2).rotateX(-Math.PI / 2).translate(.55, 1.01, -1.0)),
     new THREE.MeshStandardMaterial({ color: 0x1f4a32, roughness: .3, emissive: 0x0d2a1a, emissiveIntensity: .6, side: THREE.DoubleSide, vertexColors: true }));
   group.add(shade);
   const page = new THREE.MeshStandardMaterial({ color: 0xe9dfc8, roughness: .95, emissive: 0x2a1c0c, emissiveIntensity: .5 });
-  const openBook = new THREE.Mesh(merged([box(.24, .012, .3, -.12, .79, .5).rotateZ(.05), box(.24, .012, .3, .12, .79, .5).rotateZ(-.05)]), page);
+  const openBook = new THREE.Mesh(merged([box(.24, .012, .3, -.12, .79, -1.05).rotateZ(.05), box(.24, .012, .3, .12, .79, -1.05).rotateZ(-.05)]), page);
   openBook.position.x = -.05; group.add(openBook);
   const globe = new THREE.Mesh(new THREE.SphereGeometry(.2, 20, 14), M.sail.clone()); globe.material.color = new THREE.Color(0xcab48a);
   globe.position.set(3.0, 1.0, -1.1); globe.rotation.z = .4; group.add(globe);
@@ -127,29 +127,70 @@ export function buildLibrary({ M, radialTex, mobile, origin }) {
   shell.push(box(SIDEX * 2 + 1.3, .3, FRONTZ - BACKZ + 1.1, 0, H + .55, (FRONTZ + BACKZ) / 2 + .05));                                   // entablature
   const roofS = new THREE.Shape(); roofS.moveTo(-SIDEX - .8, 0); roofS.lineTo(SIDEX + .8, 0); roofS.lineTo(0, 1.5); roofS.closePath();
   const roof = new THREE.ExtrudeGeometry(roofS, { depth: FRONTZ - BACKZ + 1.0, bevelEnabled: false }).translate(0, H + .7, BACKZ - .45);
+  // the front: a wall with a tall doorway (doors open inward), pilasters, cornice, pediment
+  const FZ = FRONTZ + .35, DW = .8, DH = 2.7, WH = H + .5, side = SIDEX + .6 - DW;
+  shell.push(box(side, WH, .3, -(DW + side / 2), WH / 2, FZ), box(side, WH, .3, DW + side / 2, WH / 2, FZ), box(DW * 2, WH - DH, .3, 0, DH + (WH - DH) / 2, FZ));
+  shell.push(box(.2, DH + .2, .42, -DW - .1, (DH + .2) / 2, FZ + .02), box(.2, DH + .2, .42, DW + .1, (DH + .2) / 2, FZ + .02), box(DW * 2 + .7, .2, .5, 0, DH + .3, FZ + .04));
+  const ped = new THREE.Shape(); ped.moveTo(-DW - .35, 0); ped.lineTo(DW + .35, 0); ped.lineTo(0, .45); ped.closePath();
+  shell.push(new THREE.ExtrudeGeometry(ped, { depth: .4, bevelEnabled: false }).translate(0, DH + .4, FZ - .16));
+  // podium + three steps up to the threshold, a flagged forecourt down to the road
+  const PZ0 = BACKZ - .7, PZ1 = FZ + .5;
+  shell.push(box(SIDEX * 2 + 1.5, .27, PZ1 - PZ0, 0, -.135, (PZ0 + PZ1) / 2));
+  for (let k = 1; k <= 3; k++) shell.push(box(2.6 + k * .2, .27 - k * .09, .26, 0, -.27 + (.27 - k * .09) / 2, PZ1 + .13 + (k - 1) * .26));
+  shell.push(box(.07, .02, .3, 0, .01, FZ));                                                                 // threshold stone
+  const flagTex = tex(TX.makeBrick({ rgb: [128, 118, 102], mortar: '#4e463c', rows: 6, cols: 3, vary: 16, seed: 191 }), 3);
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 6).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: flagTex, bumpMap: flagTex, bumpScale: 1, roughness: .95, envMapIntensity: .2, color: 0x9a8a74 }));
+  court.position.set(0, -.262, PZ1 + .78 + 3); group.add(court);
   group.add(new THREE.Mesh(merged(shell), M.ashlar), new THREE.Mesh(merged([roof]), M.dark));
+  wood.push(box(.05, DH - .05, .78, -DW + .05, (DH - .05) / 2, FZ - .55), box(.05, DH - .05, .78, DW - .05, (DH - .05) / 2, FZ - .55));      // open door leaves
+  // lanterns either side of the door, lamp posts along the forecourt
+  const outside = [];
+  for (const x of [-1.35, 1.35]) { outside.push({ p: V(x, 2.25, FZ + .32), s: .8 }); brass.push(box(.03, .03, .2, x, 2.05, FZ + .22), box(.1, .16, .1, x, 2.22, FZ + .32)); }
+  for (const z of [PZ1 + 1.6, PZ1 + 3.6, PZ1 + 5.6, PZ1 + 8, PZ1 + 10.5, PZ1 + 13]) for (const x of (z > PZ1 + 6 ? [-.62, .62] : [-1.45, 1.45])) { outside.push({ p: V(x, 1.28, z), s: .6 }); brass.push(cyl(.02, .03, 1.5, 6, x, -.27 + .75, z), box(.09, .13, .09, x, 1.28, z), cyl(.05, .06, .05, 6, x, -.245, z)); }
+  outside.forEach((l) => lamps.push(l));
+  // tall lit windows either side of the door, and the name carved over it
+  const winG = [], mull = [];
+  for (const x of [-3.3, -2.05, 2.05, 3.3]) {
+    winG.push(box(.62, 2.2, .02, x, 2.0, FZ + .16));
+    mull.push(box(.05, 2.3, .05, x, 2.0, FZ + .18), box(.66, .05, .05, x, 2.0, FZ + .18), box(.8, .1, .12, x, .86, FZ + .2), box(.78, .14, .12, x, 3.16, FZ + .2));
+  }
+  group.add(new THREE.Mesh(merged(winG), new THREE.MeshStandardMaterial({ color: 0x1a120a, emissive: 0xc88a4e, emissiveIntensity: .55, roughness: .5, vertexColors: true })), new THREE.Mesh(merged(mull), walnut));
+  const pc = document.createElement('canvas'); pc.width = 512; pc.height = 64; const px = pc.getContext('2d');
+  px.fillStyle = '#8a7c68'; px.fillRect(0, 0, 512, 64);
+  px.font = '600 40px "Source Serif 4", Georgia, serif'; px.textAlign = 'center'; px.textBaseline = 'middle';
+  px.fillStyle = 'rgba(255,255,255,.25)'; px.fillText('BIBLIOTHÈQUE', 256, 35); px.fillStyle = '#2e261e'; px.fillText('BIBLIOTHÈQUE', 256, 33);
+  const plaque = new THREE.Mesh(new THREE.PlaneGeometry(1.55, .19), new THREE.MeshStandardMaterial({ map: tex(pc), roughness: .9 }));
+  plaque.position.set(0, DH + .1, FZ + .158); group.add(plaque);
   group.add(new THREE.Mesh(merged(wood), walnut), new THREE.Mesh(merged(panels), panel), new THREE.Mesh(merged(brass), M.iron));
 
   // glowing bulbs + soft halos (additive sprites, no real-time lights)
   const bulbs = [];
-  lamps.forEach((l, i) => bulbs.push(new THREE.IcosahedronGeometry(i === lamps.length - 1 ? .03 : .045, 1).translate(l.p.x, l.p.y - (i === lamps.length - 1 ? .04 : .0), l.p.z)));
+  lamps.forEach((l) => bulbs.push(new THREE.IcosahedronGeometry(l.desk ? .03 : .045, 1).translate(l.p.x, l.p.y - (l.desk ? .04 : 0), l.p.z)));
   group.add(new THREE.Mesh(merged(bulbs), M.glow));
   const halos = [];
   lamps.forEach((l, i) => {
-    const desk = i === lamps.length - 1;
+    const desk = !!l.desk, out = l.s < 1;
     const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: desk ? 0xffb470 : 0xffa860, transparent: true, opacity: desk ? .5 : .36, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    const s = desk ? 1.5 : 1.15; h.scale.set(s, s, 1); h.position.copy(l.p); if (!desk) h.position.z += l.p.z === BACKZ + .12 ? .12 : 0;
+    const s = desk ? 1.5 : out ? .9 : 1.15; h.scale.set(s, s, 1); h.position.copy(l.p); if (!desk) h.position.z += l.p.z === BACKZ + .12 ? .12 : 0;
     group.add(h); halos.push({ h, o: h.material.opacity, ph: i * 1.7 });
   });
   // a warm pool of light on the desk and the floor
   const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: radialTex, color: 0x8a5a2a, transparent: true, opacity: .5, blending: THREE.AdditiveBlending, depthWrite: false }));
-  pool.position.set(.4, .012, .8); group.add(pool); extra.push({ h: pool, o: .5 });
+  pool.position.set(.4, .012, -.75); group.add(pool); extra.push({ h: pool, o: .5 });
 
+  // warm light spilling out of the doorway onto the threshold, steps and forecourt
+  const spill = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 4.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: radialTex, color: 0xb07438, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false }));
+  spill.position.set(0, -.255, FRONTZ + 2.4); group.add(spill); extra.push({ h: spill, o: .55 });
+  const doorGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: 0xffa458, transparent: true, opacity: .32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  doorGlow.scale.set(2.6, 3.4, 1); doorGlow.position.set(0, 1.35, FRONTZ + .5); group.add(doorGlow);
   // k: 0 far away (glows hidden, they ignore fog) → 1 on arrival
   group.userData.flicker = (t, k = 1) => {
     for (const x of halos) { x.h.visible = k > .01; x.h.material.opacity = k * x.o * (.94 + .06 * Math.sin(t * 2.3 + x.ph) * Math.sin(t * 3.7 + x.ph * 2)); }
     for (const x of extra) { x.h.visible = k > .01; x.h.material.opacity = k * x.o; }
+    doorGlow.visible = k * (1 - inside) > .01; doorGlow.material.opacity = .32 * k * (1 - inside);
   };
+  let inside = 0;
+  group.userData.setInside = (v) => { inside = v; };
   group.userData.flicker(0, 0);
   return group;
 }
