@@ -162,3 +162,19 @@ lines, engraved relief, region names, corner rosettes and cartouche scroll-work,
 - Medieval ashlar is darker and warmer, the key light warmer for that era.
 - Era surroundings gather slightly before the building assembles (no empty approach).
 - Reduced motion: the picture always follows the chapter closest to the viewport centre.
+
+## Harbour, art-deco ministry & the library (v5)
+
+- Harbour (`props.js`, basin carved in `terrain.js` → `HARB`): stone quay, three timber
+  jetties on piles, moored boats, bollards, a treadwheel crane, a light tower, cargo and
+  porters on the quay apron. Eras II–V land and start building a little sooner, so the
+  approach is never a bare disc.
+- Era V (`dioramas.js → twentieth`): an art-deco ministry: limestone piers and bands, dark
+  glazing with a few lit windows, a central portal with canopy, a stepped tower with fins
+  and spire, roof and forecourt flagpoles, lamps; 1920s motorcars around it. Cutaway: the
+  facade folds down onto the steps, revealing the treaty hall (table, chandeliers).
+- `js/library3d.js`: the road ends in a library: walnut bays (all books in one
+  InstancedMesh, lamp light baked into their colours), a night window, sconces with soft
+  halos, a desk with banker's lamp and open book, globe, rolling ladder, rug; seen from the
+  road as an ashlar building with its front cut away. The library backdrop is now only
+  lightly blurred/dimmed (`main.js`). It is hidden until p > 0.72 (fully fogged before).
