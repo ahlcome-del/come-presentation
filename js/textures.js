@@ -286,3 +286,37 @@ export function addPaperFibre(ctx, w, h, seed = 101) {
   }
   ctx.restore();
 }
+
+/** the dark world ground: worn paper with a faint engraved graticule & contour hatching */
+export function makeGroundMap(size = 1024, seed = 131) {
+  const cv = canvas(size, size), c = cv.getContext('2d'), r = rng(seed);
+  c.fillStyle = '#3a3229'; c.fillRect(0, 0, size, size);
+  cloudy(c, size, size, 6, .22, seed, '0,0,0', '120,100,75');
+  cloudy(c, size, size, 22, .1, seed + 1);
+  c.strokeStyle = 'rgba(210,190,150,.16)'; c.lineWidth = size / 1024 * 1.4;
+  const step = size / 4;
+  for (let i = 0; i <= 4; i++) { c.beginPath(); c.moveTo(i * step, 0); c.lineTo(i * step, size); c.stroke(); c.beginPath(); c.moveTo(0, i * step); c.lineTo(size, i * step); c.stroke(); }
+  // faint "coastline" contours
+  c.strokeStyle = 'rgba(205,185,145,.10)'; c.lineWidth = size / 1024;
+  for (let k = 0; k < 6; k++) {
+    const cx = r() * size, cy = r() * size, R0 = size * (.08 + r() * .14);
+    for (let ring = 0; ring < 3; ring++) {
+      c.beginPath();
+      for (let a = 0; a <= 64; a++) {
+        const t = a / 64 * Math.PI * 2, rr = R0 * (1 + ring * .12) * (1 + .18 * Math.sin(t * 3 + k) + .1 * Math.sin(t * 7 + k * 2));
+        const x = cx + Math.cos(t) * rr, y = cy + Math.sin(t) * rr;
+        a ? c.lineTo(x, y) : c.moveTo(x, y);
+      }
+      c.stroke();
+    }
+  }
+  grain(c, size, size, { amount: .12, seed: seed + 2 });
+  return cv;
+}
+
+/** a single ink dash (repeats along the route ribbon) */
+export function makeDash() {
+  const cv = canvas(64, 8), c = cv.getContext('2d');
+  c.fillStyle = 'rgba(255,255,255,1)'; c.fillRect(0, 1, 34, 6);
+  return cv;
+}

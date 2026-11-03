@@ -87,7 +87,7 @@ async function boot() {
   if (app.scene) { app.scene.frame(); app.scene.start(); }
   loader.classList.add('is-done');
   html.classList.add('is-ready');
-  setTimeout(() => $$('.chapter--hero .rv').forEach((el) => { el.style.transition = 'none'; }), 1500);
+  setTimeout(() => { $$('.chapter--hero .rv').forEach((el) => { el.style.transition = 'none'; el._o = null; }); app.heroSettled = true; }, 1500);
 
   if (app.static) setupStatic(); else setupScroll();
   setupReveal();
@@ -103,6 +103,13 @@ async function boot() {
 }
 
 /* ------------------------------------------------------------ scroll story */
+/*
+ * Scroll only sets a TARGET progress. The scene damps its own progress towards it
+ * every frame (see scene.js), and every overlay below (headlines, era captions,
+ * letterbox, progress line, backdrop blur) is computed from that same damped value
+ * in onSceneFrame — so text and 3D can never drift apart, and a fast scroll
+ * simply glides through the journey.
+ */
 function setupScroll() {
   gsap.registerPlugin(ScrollTrigger);
   const lenis = app.lenis = new Lenis({ duration: 1.15, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true });
@@ -110,65 +117,70 @@ function setupScroll() {
   gsap.ticker.add((time) => lenis.raf(time * 1000));
   gsap.ticker.lagSmoothing(0);
 
-  const state = { p: 0 };
-  const tl = gsap.timeline({
-    defaults: { ease: 'none' },
-    scrollTrigger: { trigger: '#voyage', start: 'top top', endTrigger: '#bibliotheque', end: 'top top', scrub: 1, invalidateOnRefresh: true },
+  app.st = ScrollTrigger.create({
+    trigger: '#voyage', start: 'top top', endTrigger: '#bibliotheque', end: 'top top',
+    invalidateOnRefresh: true,
+    onUpdate: (self) => onProgress(self.progress),
   });
-  app.st = tl.scrollTrigger;
-  tl.to(state, { p: 1, duration: 1, onUpdate: () => onProgress(state.p) }, 0);
-
-  // text blocks: opacity + 12px + blur, staggered
-  const IN = { opacity: 0, y: 12, filter: 'blur(8px)' }, SHOWN = { opacity: 1, y: 0, filter: 'blur(0px)' };
-  $$('.stage .chapter').forEach((ch) => {
-    if (ch.classList.contains('chapter--chip')) return;
-    const items = $$('.rv', ch);
-    const tin = parseFloat(ch.dataset.in), tout = parseFloat(ch.dataset.out);
-    if (!Number.isNaN(tin)) {
-      tl.set(ch, { autoAlpha: 1 }, tin - .0005);
-      tl.fromTo(items, IN, { ...SHOWN, duration: .024, stagger: .006, ease: EASE }, tin);
-    }
-    if (!Number.isNaN(tout)) {
-      tl.to(items, { opacity: 0, y: -12, filter: 'blur(8px)', duration: .02, stagger: .004, ease: EASE }, tout);
-      tl.set(ch, { autoAlpha: 0 }, tout + .036);
-    }
-  });
-  // cinema letterbox during maps & eras; blurred/dimmed backdrop for the library
-  tl.fromTo(html, { '--lb': 0 }, { '--lb': 1, duration: .04 }, .31);
-  tl.to(html, { '--lb': 0, duration: .04 }, .8);
-
+  texts = $$('.stage .chapter').filter((ch) => !ch.classList.contains('chapter--chip')).map((ch) => ({
+    ch, items: $$('.rv', ch), tin: parseFloat(ch.dataset.in), tout: parseFloat(ch.dataset.out), shown: null,
+  }));
   setupKeyboard();
-  onProgress(0);
+  onProgress(app.st.progress || 0);
 }
 
 function onProgress(p) {
-  app.p = p;
+  app.target = p;
   app.scene?.setProgress(p);
-  // library: the 3D becomes a blurred, dimmed backdrop (no filter at all before)
-  const lb = EASE(clamp((p - .87) / .1));
+}
+
+/* ------------------------------------------------------------ overlays (from damped p) */
+let texts = [];
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+function updateOverlays(p) {
+  app.p = p;
+  // headlines: opacity + 12px + blur, staggered 0.004 progress per line (≈ 60–80 ms at reading speed)
+  for (const t of texts) {
+    let vis = false;
+    t.items.forEach((el, j) => {
+      const din = Number.isNaN(t.tin) ? 1 : smoothstep(t.tin + j * .004, t.tin + .02 + j * .004, p);
+      const dout = Number.isNaN(t.tout) ? 0 : smoothstep(t.tout + j * .003, t.tout + .018 + j * .003, p);
+      const o = din * (1 - dout);
+      if (o > .001) vis = true;
+      const key = o.toFixed(3);
+      if (el._o === key) return; el._o = key;
+      if (t.ch.classList.contains('chapter--hero') && !app.heroSettled) return;   // CSS intro first
+      el.style.opacity = key;
+      el.style.transform = o > .999 ? 'none' : `translate3d(0, ${((din < 1 ? 1 : -1) * (1 - o) * 12).toFixed(1)}px, 0)`;
+      el.style.filter = o > .99 ? 'none' : `blur(${((1 - o) * 8).toFixed(2)}px)`;
+    });
+    if (t.shown !== vis) { t.shown = vis; t.ch.style.visibility = vis ? 'visible' : 'hidden'; t.ch.style.opacity = vis ? '1' : '0'; }
+  }
+  // cinema letterbox during the journey
+  html.style.setProperty('--lb', (smoothstep(.3, .36, p) * (1 - smoothstep(.83, .88, p))).toFixed(3));
+  // library: the 3D becomes a blurred, dimmed backdrop
+  const lb = EASE(clamp((p - .88) / .1));
   const canvas = $('#scene');
-  const f = lb > 0 ? `blur(${(lb * (MOBILE ? 5 : 8)).toFixed(2)}px) brightness(${(1 - lb * .45).toFixed(3)})` : '';
+  const f = lb > 0.001 ? `blur(${(lb * (MOBILE ? 5 : 8)).toFixed(2)}px) brightness(${(1 - lb * .45).toFixed(3)})` : '';
   if (canvas.style.filter !== f) canvas.style.filter = f;
   const fill = $('#progress-fill'); if (fill) fill.style.setProperty('--p', p.toFixed(4));
-  const idx = p < .3 ? 0 : p < .52 ? 1 : p < .86 ? 2 : 3;
+  const idx = p < .27 ? 0 : p < .4 ? 1 : p < .86 ? 2 : 3;
   $$('#progress button').forEach((b, i) => b.classList.toggle('is-active', i === idx));
-  $('#progress').classList.toggle('is-hidden', p > .985);
+  $('#progress').classList.toggle('is-hidden', p > .97);
   $$('.nav__links a').forEach((a) => a.setAttribute('aria-current', String((a.hash === '#voyage' && p < .9) || (a.hash === '#bibliotheque' && p >= .9))));
 }
 
 /* era chips follow the projected front of each diorama base */
 const chips = [];
 function onSceneFrame(scene) {
-  if (app.static || !scene.dioramas.length) {
-    if (!app.static) chips.forEach((c) => c && (c.el.style.visibility = 'hidden'));
-    return;
-  }
+  if (!app.static) updateOverlays(scene.p);
   if (!chips.length) $$('.chapter--chip').forEach((el) => chips.push({ el, i: +el.dataset.era }));
+  if (app.static) return;
   const anchors = scene.anchors();
   const vw = innerWidth, vh = innerHeight;
   for (const c of chips) {
     const a = anchors[c.i]; if (!a) continue;
-    const o = clamp((a.e - .25) / .5);
+    const o = a.z < 1 ? clamp(a.e) : 0;
     if (o <= 0.01) { if (c.vis !== false) { c.el.style.visibility = 'hidden'; c.el.style.opacity = '0'; c.vis = false; } continue; }
     const w = c.el.offsetWidth || 300, h = c.el.offsetHeight || 90;
     const x = clamp(a.x - w / 2, 16, vw - w - 16), y = clamp(a.y + 18, 70, vh - h - 24);
@@ -200,7 +212,6 @@ function setupStatic() {
   $$('.stage .chapter').forEach((ch) => io.observe(ch));
   $('#bibliotheque').dataset.key = '0.95';
   io.observe($('#bibliotheque'));
-  if (!scene.dioramas.length) scene.ensureDioramas();
   scene.setProgress(.03);
 }
 
