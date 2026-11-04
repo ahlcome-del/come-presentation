@@ -14,7 +14,7 @@ import * as THREE from './vendor/three.js';
 import { mergeGeometries } from './vendor/three.js';
 import { bake } from './dioramas.js';
 import * as TX from './textures.js';
-import { terrainH, riverZ, HARB, inBasin, COAST } from './terrain.js';
+import { terrainH, riverZ, HARB, inBasin, COAST, inCoast, shoreX, farX } from './terrain.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
@@ -268,7 +268,7 @@ export class Props {
             const big = /tree|olive|cypress|poplar|pine|house|House|banner|lamp|pole|topiary/.test(kind);
             if (big && z > S.z + .55) continue;                                   // nothing tall between lens and era
             if (Math.abs(x) < .45 && z > S.z) continue;                                       // the road itself
-            if (inBasin(x, z, .25)) continue;                                                // the harbour water
+            if (inBasin(x, z, .25) || inCoast(x, z, .3)) continue;                            // the harbour and the bay
             // figures gather in small groups
             const fig = /^fig/.test(kind);
             add(kind, x, z, i, (fig ? 1.15 : 1.1) * (.9 + r() * .2));
@@ -286,7 +286,7 @@ export class Props {
     // trees & cypresses in loose clumps
     for (let k = 0; k < 150 * dens; k++) {
       const z = zStart - r() * (zStart - zEnd), x = sideX();
-      if (nearStation(x, z) || inBasin(x, z, .3) || (z < zLib && Math.abs(x) < 2.4)) continue;
+      if (nearStation(x, z) || inBasin(x, z, .3) || inCoast(x, z, .8) || (z < zLib && Math.abs(x) < 2.4)) continue;
       const era = Math.max(0, Math.min(4, Math.round((-z - 15) / 7)));
       const q = r(), tr = ['tree', 'tree2', 'tree3'][Math.floor(r() * 3)];
       const kind = era === 0 ? (q < .5 ? 'cypress' : q < .85 ? 'olive' : 'pine') : era === 4 ? (q < .35 ? 'poplar' : tr) : era === 2 ? (q < .35 ? 'pine' : q < .5 ? 'cypress' : tr) : (q < .15 ? 'cypress' : q < .3 ? 'poplar' : tr);
@@ -294,7 +294,7 @@ export class Props {
       if (r() < .5) add(kind, x + (r() - .5) * .5, z + (r() - .5) * .5, -1, .7 + r() * .5);
     }
     // rocks & small ruins
-    for (let k = 0; k < 45 * dens; k++) { const z = zStart - r() * (zStart - zEnd), x = sideX(); if (!nearStation(x, z) && !inBasin(x, z, .3) && !(z < zLib && Math.abs(x) < 2.4)) add(r() < .8 ? 'rock' : 'ruin', x, z, -1, .8 + r() * .8); }
+    for (let k = 0; k < 45 * dens; k++) { const z = zStart - r() * (zStart - zEnd), x = sideX(); if (!nearStation(x, z) && !inBasin(x, z, .3) && !inCoast(x, z, .8) && !(z < zLib && Math.abs(x) < 2.4)) add(r() < .8 ? 'rock' : 'ruin', x, z, -1, .8 + r() * .8); }
     // villages: a few houses around a well, between consecutive eras
     for (let i = 0; i < stations.length - 1; i++) {
       const zc = (stations[i].z + stations[i + 1].z) / 2, xc = -Math.sign(stations[i].x) * (3.4 + r() * 1.2);
@@ -383,7 +383,7 @@ export class Props {
 
     /* fields: a patchwork of ploughed and sown strips draped on the relief */
     const fr = rng(seed + 99), fg = [], fieldTint = [[.4, .33, .24], [.32, .36, .22], [.46, .39, .26], [.3, .27, .2], [.37, .4, .26]];
-    const avoid = (x, z) => Math.abs(x) < .9 || nearStation(x, z) || inBasin(x, z, .4) || Math.abs(z - riverZ(x)) < .7 || z > -6;
+    const avoid = (x, z) => Math.abs(x) < .9 || nearStation(x, z) || inBasin(x, z, .4) || inCoast(x, z, .5) || Math.abs(z - riverZ(x)) < .7 || z > -6;
     for (let k = 0; k < (mobile ? 26 : 44); k++) {
       const z = -7 - fr() * (stations[stations.length - 1].z * -1 - 2), x = (fr() < .5 ? -1 : 1) * (1.1 + fr() * 3.2);
       const w = .8 + fr() * 1.3, d = .6 + fr() * 1.1, a = (fr() - .5) * .5;
@@ -419,29 +419,97 @@ export class Props {
     }
     this.group.add(new THREE.Mesh(merged(deck), M.wood));
 
-    /* the sea beyond the first era: a wide shallow bay, a wet sand line, rocks and a few
-       caiques at anchor — the Mediterranean the temple looks out on */
-    const seaM = M.water.clone(); seaM.color = new THREE.Color(0x8397a0); seaM.roughness = .42; seaM.envMapIntensity = .7;
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(COAST.rx * 2 + 2.2, COAST.rz * 2 + 2.2, 1, 1).rotateX(-Math.PI / 2), seaM);
-    sea.geometry = bake(sea.geometry, false);
-    sea.position.set(COAST.x, G - .062, COAST.z); this.group.add(sea);
-    const shore = [], foam = [];
-    for (let i = 0; i < 26; i++) {
-      const a = i / 26 * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
-      const x = COAST.x + ca * (COAST.rx + .55 + Math.abs(Math.sin(a * 3)) * .25), z = COAST.z + sa * (COAST.rz + .55 + Math.abs(Math.cos(a * 2)) * .2);
-      shore.push(box(.16 + Math.abs(sa) * .18, .02, .16 + Math.abs(ca) * .18, x, G - .048, z));
-      foam.push(box(.13 + Math.abs(sa) * .14, .004, .13 + Math.abs(ca) * .14, COAST.x + ca * (COAST.rx + .28), G - .0595, COAST.z + sa * (COAST.rz + .28)));
+    /* the sea beside the first era: an open stretch of coast west of the temple.
+       terrain.js carves the seabed behind shoreX(z); here we lay the water plane over it,
+       build a beach strip along the shoreline, a jetty, caiques at anchor, and the olive
+       grove on the slope above the sand. Everything follows the same shoreline function,
+       so the waterline stays sharp from every camera angle. */
+    // water: one sheet from just inside the shoreline out into the fog
+    const seaM = new THREE.MeshStandardMaterial({ color: 0x6f8b93, emissive: 0x273c42, emissiveIntensity: .8, roughness: .4, metalness: .04, envMapIntensity: 1 });
+    const WX1 = -4.4, WX0 = -16.5, seaW = WX1 - WX0, seaL = COAST.z0 - COAST.z1 + 3.4;
+    const sea = new THREE.Mesh(bake(new THREE.PlaneGeometry(seaW, seaL, 1, 1).rotateX(-Math.PI / 2), false), seaM);
+    sea.position.set((WX0 + WX1) / 2, G - .022, (COAST.z0 + COAST.z1) / 2 - .6); this.group.add(sea);
+    // a paler shallow band hugging the shore
+    const shallowG = new THREE.PlaneGeometry(1, seaL, 1, 1).rotateX(-Math.PI / 2);
+    const sPts = shallowG.attributes.position;
+    for (let i = 0; i < sPts.count; i++) { const z = sPts.getZ(i) + (COAST.z0 + COAST.z1) / 2; sPts.setX(i, shoreX(z) - .42 + sPts.getX(i) * .5); }
+    const shallow = new THREE.Mesh(bake(shallowG, false), new THREE.MeshBasicMaterial({ color: 0xb4c8c6, transparent: true, opacity: .34, depthWrite: false }));
+    shallow.position.y = G - .019; this.group.add(shallow);
+    // the beach: a ribbon following the shore from the fog in the north to the temple slope
+    const sandC = new THREE.Color(0xd6c39e), wetC = new THREE.Color(0xa89679), grassC = new THREE.Color(0x6d6b4c);
+    const sandBeachMat = new THREE.MeshStandardMaterial({ color: sandC, roughness: .96, envMapIntensity: .3 });
+    const beach = [], bcols = [], N = 54;
+    for (let i = 0; i <= N; i++) {
+      const z = COAST.z0 + .9 - (i / N) * (COAST.z0 - COAST.z1 + 2.2);
+      const sx = shoreX(z);
+      // rows: dry sand behind, wet sand at the waterline, a low grass lip inland
+      for (const [dx, y, c] of [[-.02, .026, sandC], [-.3, -.004, sandC], [-.56, -.048, wetC]]) {
+        beach.push(sx + dx, G + y, z); bcols.push(c.r, c.g, c.b);
+      }
     }
-    const sandM = M.limestone.clone(); sandM.color = new THREE.Color(0xd9c49a);
-    this.group.add(new THREE.Mesh(merged(shore), sandM));
-    const foamM = new THREE.MeshBasicMaterial({ color: 0xb9c4c0, transparent: true, opacity: .33, depthWrite: false });
-    this.group.add(new THREE.Mesh(merged(foam), foamM));
-    const beachRocks = [];
-    for (let i = 0; i < 16; i++) { const a = .4 + i * .38, x = COAST.x + Math.cos(a) * (COAST.rx + 1.0 + (i % 3) * .35), z = COAST.z + Math.sin(a) * (COAST.rz + .9 + (i % 4) * .3);
-      beachRocks.push(ico(.06 + (i % 3) * .02, 0, x, G + .018, z, 1.2, .6, 1)); }
-    this.group.add(new THREE.Mesh(merged(beachRocks), M.stone));
-    for (const [bx, bz, br] of [[COAST.x - 1.3, COAST.z + 1.1, .6], [COAST.x + .6, COAST.z - 1.5, 2.2], [COAST.x - .2, COAST.z + 2.1, -.9]]) add('boat', bx, bz, -1, 1.15, br), (place[place.length - 1].water = true);
-    add('fig0stand' in this.K ? 'fig0stand' : 'fig0stand', COAST.x + 1.2, COAST.z + 3.1, -1, 1.1);
+    const bidx = [];
+    for (let i = 0; i < N; i++) for (let j = 0; j < 2; j++) { const a0 = i * 3 + j, b0 = (i + 1) * 3 + j; bidx.push(a0, a0 + 1, b0, a0 + 1, b0 + 1, b0); }
+    const beachG = new THREE.BufferGeometry();
+    beachG.setAttribute('position', new THREE.Float32BufferAttribute(beach, 3));
+    beachG.setAttribute('color', new THREE.Float32BufferAttribute(bcols, 3));
+    beachG.setIndex(bidx); beachG.computeVertexNormals();
+    this.group.add(new THREE.Mesh(beachG, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .97, envMapIntensity: .28, side: THREE.DoubleSide })));
+    // foam: short broken quads along the waterline, following the shore
+    const foam = [];
+    for (let i = 0; i < 46; i++) {
+      if (i % 6 === 2) continue;
+      const z = COAST.z0 - .6 - i * .26, sx = shoreX(z) - .06, w = .06 + (i % 3) * .035;
+      foam.push(box(w, .004, .28, sx - .08, G - .0165, z).rotateY(.2 * Math.sin(i)));
+    }
+    this.group.add(new THREE.Mesh(merged(foam), new THREE.MeshBasicMaterial({ color: 0xdde6df, transparent: true, opacity: .5, depthWrite: false })));
+
+    // rocky points, dune grass and driftwood along the sand
+    const beachRocks = [], dune = [];
+    for (let i = 0; i < 26; i++) {
+      const z = COAST.z0 - .3 - i * .5, sx = shoreX(z);
+      if (i % 2) beachRocks.push(ico(.05 + (i % 3) * .025, 0, sx - .12 - (i % 3) * .1, G - .01, z, 1.4, .5, 1));
+      else dune.push(cone(.017, .06 + (i % 4) * .02, 4, sx + .16 + (i % 3) * .08, G + .03, z).rotateY(i));
+    }
+    this.group.add(new THREE.Mesh(merged(beachRocks), M.stone), new THREE.Mesh(merged(dune), M.foliage));
+
+    // the far bank: a pale sand line, a dark scrub slope behind it, and low hills that climb
+    // into the fog — the water reads as a bay between two shores, never a pond
+    const farSand = [], farTree = [];
+    for (let i = 0; i < 30; i++) {
+      const z = COAST.z0 - .4 - i * .5, fx = farX(z);
+      farSand.push(box(.5, .05, .55, fx - .1, G + .01, z));
+      if (i % 3 === 1) { const tx = fx - .8 - (i % 4) * .3; farTree.push(cone(.09 + (i % 2) * .03, .3 + (i % 3) * .08, 5, tx, G + terrainH(tx, z + .2) + .14, z + .2).rotateY(i)); }
+    }
+    this.group.add(new THREE.Mesh(merged(farSand), sandBeachMat || M.limestone));
+    this.group.add(new THREE.Mesh(merged(farTree), M.foliage));   // the far slope itself is terrain (soft rise), no blocks
+    // a timber jetty running out from the beach into deeper water
+    const jz = -17.2, jsx = shoreX(jz) + .1, jet = [];
+    for (let k = 0; k < 11; k++) {
+      jet.push(box(.16, .012, .052, jsx - .15 - k * .17, G - .038, jz + k * .012).rotateY(.06));
+      if (k % 2 === 1) for (const s2 of [-1, 1]) jet.push(cyl(.007, .008, .22, 5, jsx - .15 - k * .17, G - .15, jz + k * .012 + .048 * s2));
+    }
+    this.group.add(new THREE.Mesh(merged(jet), M.wood));
+
+    // caiques at anchor, hulls and lateen sails reading against the pale water
+    const boats = [[jsx - 1.15, jz + 1.1, 2.1, .5], [jsx - 2.1, jz - 2.0, 1.8, -.5], [jsx - .55, jz - 3.4, 1.6, 2.2],
+      [jsx - 3.1, jz + 2.9, 1.4, .9], [jsx - 1.0, jz + 3.7, 1.25, -1.9], [jsx - 1.6, jz - .5, 1.1, 1.7], [jsx - 4.2, jz - .8, 1.2, 2.6]];
+    for (const [bx, bz, bs, br] of boats) { add('boat', bx, bz, 0, bs, br); place[place.length - 1].water = true; }
+    // figures on the jetty and the sand, amphorae stacked by the water
+    add('fig00', jsx - .2, jz + .35, 0, 1.2, .5);
+    add('fig02', jsx - 1.15, jz + 1.05, 0, 1.15, -2.2);
+    add('fig03', jsx + .75, jz - 1.35, 0, 1.1, .9);
+    add('fig01', jsx + 1.2, jz + 1.7, 0, 1.1, 2.6);
+    for (const [ax, az] of [[jsx + .55, jz - .55], [jsx + .75, jz - .8], [jsx + .4, jz - .85]]) add('amphora', ax, az, 0, 1.1, 0);
+    // the olive grove on the slope above the beach: a loose double row behind the sand
+    const grove = [[.62, .4], [.95, 1.5], [.55, 2.5], [1.0, 3.6], [.62, 4.6], [1.0, 5.7], [.5, 6.7], [.9, 7.9], [1.05, 2.2], [1.0, 6.0], [.75, 8.9], [.42, 3.9]];
+    for (const [gx, gz] of grove) { const z = jz + gz; add('olive', shoreX(z) + gx, z, 0, 1.2 + (Math.abs(gx * 7.3) % 1) * .4, gx * 2.1); }
+    for (const [gx, gz] of [[.8, -.4], [1.15, 1.0], [.95, 7.4], [.35, 5.4]]) { const z = jz + gz; add('cypress', shoreX(z) + gx, z, 0, 1.3, .3); }
+    // a low dry-stone wall between the grove and the sand, and a stair down to the beach
+    const wall = [];
+    for (let i = 0; i < 16; i++) { const z = jz - 1.6 + i * .55, sx = shoreX(z); wall.push(box(.07, .085 + (i % 3) * .02, .24, sx + .3, G + .03, z).rotateY(.08 * Math.sin(i))); }
+    this.group.add(new THREE.Mesh(merged(wall), M.ashlar));
+    // these props were added after the first ground pass: seat them all on the terrain
+    for (const p2 of place) p2.y = p2.water ? -.075 : terrainH(p2.x, p2.z);
 
     /* smoke: soft billowing puffs from chimneys (a few sprites each) */
     this.smokeTex = smokeTex; this.smokes = [];

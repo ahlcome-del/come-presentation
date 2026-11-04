@@ -23,8 +23,22 @@ const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a)
 
 let STATIONS = [], RIVER_Z = -25, LIB_Z = -56;
 export function setStations(list) { STATIONS = list; if (list.length > 2) RIVER_Z = (list[1].z + list[2].z) / 2 + .6; if (list.length) LIB_Z = list[list.length - 1].z - 20; if (list.length > 2) { HARB.x = list[2].x - 4.15; HARB.z = list[2].z; } }
-/** the sea beyond the Antiquity temple: a shallow bay the road turns away from */
-export const COAST = { x: -9.4, z: -12.6, rx: 5.2, rz: 4.6 };
+/** the bay west of the Antiquity temple: water between the temple's bank and a far shore */
+export const COAST = { z0: -9.6, z1: -24.8, w: 3.5 };
+/** the near shoreline — the temple's bank, with the beach terrace, grove and jetty on it */
+export function shoreX(z) {
+  const wander = Math.sin(z * .68 + 1.3) * .13 + Math.sin(z * 2.2 - .5) * .05;
+  const sweep = Math.max(0, -(z + 19.4)) * .45;
+  return -4.28 + wander - sweep;
+}
+/** the far shoreline — the opposite bank, rising into the hills */
+export function farX(z) { return shoreX(z) - COAST.w - Math.sin(z * .33 + .7) * .35; }
+/** how far inside the water a point is (the nearer of the two banks): > 0 in the bay */
+export function seaDepth(x, z) {
+  const end = sstep(COAST.z1 - 1.2, COAST.z1 + 1.4, z) * sstep(COAST.z0 + 2.4, COAST.z0 - 1.2, z);
+  return Math.min(shoreX(z) - x, x - farX(z)) * end;
+}
+export const inCoast = (x, z, m = 0) => seaDepth(x, z) > -m && z < COAST.z0 + 1 && z > COAST.z1 - 1 && x < 0;
 /** the harbour basin beside the Discoveries era (water below the quay) */
 export const HARB = { x: -6.25, z: -29, rx: 2.05, rz: 2.7 };
 export const inBasin = (x, z, m = 0) => Math.abs(x - HARB.x) < HARB.rx + m && Math.abs(z - HARB.z) < HARB.rz + m;
@@ -42,12 +56,15 @@ export function terrainH(x, z) {
   const lib = sstep(0, 2.5, Math.max(Math.abs(x) - 5.2, z - (LIB_Z + 6.5), (LIB_Z - 4.2) - z));   // level ground under the library
   const hb = sstep(0, .25, Math.max(Math.abs(x - HARB.x) - HARB.rx, Math.abs(z - HARB.z) - HARB.rz));  // sharp quay edge
   const hb2 = sstep(0, 3, Math.max(Math.abs(x - HARB.x) - HARB.rx, Math.abs(z - HARB.z) - HARB.rz));  // hills ease off around it
-  const cd = Math.max(Math.abs(x - COAST.x) - COAST.rx, Math.abs(z - COAST.z) - COAST.rz);
-  const bayIn = 1 - sstep(0, 1.0, cd);                     // 1 in the water, 0 on land
-  const beach = (1 - sstep(1.0, 3.2, cd)) * (1 - bayIn);    // a low sandy shelf just above the water
   const land = (((Math.max(0, hills * 2.6) * hb2 + ripple) * rm - .045 * (1 - rm)) * lib - .01 * (1 - lib)) * hb - .09 * (1 - hb);
-  // the sea beyond the first era: water just below the road level, a beach shelf, then the land
-  return lerp(land, -.075 + beach * .055, bayIn) ;
+  // the bay: between the two banks the seabed is well below the water line; beyond the far
+  // bank the ground climbs again into the hills on the other side
+  const sd = seaDepth(x, z);
+  const sea = sstep(-.5, .5, sd);
+  const west = farX(z) - x;   // how far west of the far bank (the far land lies there)
+  const far = sstep(.1, 1.4, west) * sstep(COAST.z0 + 1.2, COAST.z0 - 1.6, z) * sstep(COAST.z1 - 1.2, COAST.z1 + 1.6, z);
+  const farLand = land + .16 + .55 * sstep(0, 3.0, west);
+  return lerp(lerp(land, farLand, far * (1 - sea)), -.24, sea);
 }
 
 /* ---------------- ground mesh ---------------- */
