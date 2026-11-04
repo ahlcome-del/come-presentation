@@ -92,17 +92,6 @@
   </nav>
 </header>
 
-<!-- Progress indicator -->
-<nav class="progress" id="progress" aria-label="Chapitres du voyage">
-  <div class="progress__track"><span class="progress__fill" id="progress-fill"></span></div>
-  <ol>
-    <li><button type="button" data-goto="0.02" style="--at:0.0" aria-label="Aller au chapitre : Le livre">Livre</button></li>
-    <li><button type="button" data-goto="0.262" style="--at:0.28" aria-label="Aller au chapitre : Les cartes">Cartes</button></li>
-    <li><button type="button" data-goto="0.312" style="--at:0.62" aria-label="Aller au chapitre : Les époques">Époques</button></li>
-    <li><button type="button" data-goto="library" style="--at:1" aria-label="Aller à la bibliothèque">Bibliothèque</button></li>
-  </ol>
-</nav>
-
 <div class="era-pill glass" id="era-pill" aria-hidden="true">
   <span class="era-pill__dot"></span>
   <span class="era-pill__label" id="era-pill-label">Le livre</span>
@@ -110,9 +99,10 @@
 
 <main id="main">
   <p id="sr-status" class="visually-hidden" role="status" aria-live="polite"></p>
-  <!-- The scroll story: one tall section, a pinned 100vh stage -->
+  <!-- The click story: one full-screen stage, no page scroll -->
   <section id="voyage" class="voyage" aria-label="Voyage : du livre aux époques">
     <div class="stage">
+      <button class="stage__advance" id="advance" type="button" aria-label="Ouvrir le livre"></button>
       <div class="chapter chapter--hero" data-key="0.02" data-out="0.028">
         <p class="eyebrow rv"><span class="dot" aria-hidden="true"></span>Présentations historiques</p>
         <h1 class="display rv">L’histoire,<br><span class="k">présentée.</span></h1>
@@ -159,44 +149,44 @@
     </div>
   </section>
 
-  <!-- The library: normal scroll -->
-  <section id="bibliotheque" class="library" aria-labelledby="lib-title">
-    <header class="library__head">
-      <h2 id="lib-title" class="section-title rv-io">Bibliothèque</h2>
-      <p class="section-lede rv-io">Présentations historiques, en 3D, à explorer.</p>
-    </header>
-    <ul class="cards" id="cards" role="list">
-      <!-- Cards are rendered from presentations.json by js/library.js -->
-    </ul>
-    <noscript><p class="noscript">Activez JavaScript pour afficher la bibliothèque, ou ouvrez directement <a href="https://ahlcome-del.github.io/Kolonialpolitik/" lang="de" target="_blank" rel="noopener noreferrer">Deutsche Kolonialpolitik</a>.</p></noscript>
+  <!-- The library: a full-screen panel, opened from the nav or after the last era -->
+  <section id="bibliotheque" class="library panel" aria-labelledby="lib-title" aria-hidden="true" inert>
+    <div class="panel__inner">
+      <button class="panel__back pill glass" type="button" data-close>Retour au voyage</button>
+      <header class="library__head">
+        <h2 id="lib-title" class="section-title rv-io" tabindex="-1">Bibliothèque</h2>
+        <p class="section-lede rv-io">Présentations historiques, en 3D, à explorer.</p>
+      </header>
+      <ul class="cards" id="cards" role="list">
+        <!-- Cards are rendered from presentations.json by js/library.js -->
+      </ul>
+      <noscript><p class="noscript">Activez JavaScript pour afficher la bibliothèque, ou ouvrez directement <a href="https://ahlcome-del.github.io/Kolonialpolitik/" lang="de" target="_blank" rel="noopener noreferrer">Deutsche Kolonialpolitik</a>.</p></noscript>
+    </div>
   </section>
 
-  <section id="a-propos" class="about" aria-labelledby="about-title">
-    <h2 id="about-title" class="eyebrow rv-io"><span class="dot" aria-hidden="true"></span>À propos</h2>
-    <!-- Placeholder: replace these two sentences with the author's own text. -->
-    <p class="about__text rv-io">Côme Presentation réunit des présentations historiques conçues comme de courts documentaires interactifs, entre récit, cartes et reconstitutions en trois dimensions. <span class="about__muted">Chaque présentation s’appuie sur des sources citées et cherche à rendre le passé lisible, sans le&nbsp;simplifier.</span></p>
+  <section id="a-propos" class="about panel" aria-labelledby="about-title" aria-hidden="true" inert>
+    <div class="panel__inner">
+      <button class="panel__back pill glass" type="button" data-close>Retour au voyage</button>
+      <h2 id="about-title" class="eyebrow rv-io" tabindex="-1"><span class="dot" aria-hidden="true"></span>À propos</h2>
+      <!-- Placeholder: replace these two sentences with the author's own text. -->
+      <p class="about__text rv-io">Côme Presentation réunit des présentations historiques conçues comme de courts documentaires interactifs, entre récit, cartes et reconstitutions en trois dimensions. <span class="about__muted">Chaque présentation s’appuie sur des sources citées et cherche à rendre le passé lisible, sans le&nbsp;simplifier.</span></p>
+      <footer class="footer">
+        <div class="footer__inner">
+          <div class="footer__colophon">
+            <a class="footer__brand" href="#voyage"><svg class="footer__mark" viewBox="0 0 1323 2095" aria-hidden="true"><use href="#sil"/></svg><span class="wordmark">Côme Presentation</span></a>
+            <p class="footer__meta">© <span id="year">2026</span> · Présentations historiques en 3D</p>
+            <p class="footer__note">Sources citées dans chaque présentation.</p>
+          </div>
+          <nav class="footer__links" aria-label="Liens de fin">
+            <a class="footer__link" href="#a-propos">À propos</a>
+            <a class="footer__link" href="#voyage">Retour au livre</a>
+            <a class="pill glass footer__contact" href="https://github.com/ahlcome-del" target="_blank" rel="noopener noreferrer" aria-label="Profil GitHub (nouvel onglet)">GitHub <svg viewBox="0 0 7 12" aria-hidden="true"><path d="M1 1l5 5-5 5"/></svg></a>
+          </nav>
+        </div>
+      </footer>
+    </div>
   </section>
 </main>
-
-<div class="cue glass" id="cue" aria-hidden="true">
-  <span class="cue__label">Défiler</span>
-  <span class="cue__line"><span></span></span>
-</div>
-
-<footer class="footer">
-  <div class="footer__inner">
-    <div class="footer__colophon">
-      <a class="footer__brand" href="#voyage"><svg class="footer__mark" viewBox="0 0 1323 2095" aria-hidden="true"><use href="#sil"/></svg><span class="wordmark">Côme Presentation</span></a>
-      <p class="footer__meta">© <span id="year">2026</span> · Présentations historiques en 3D</p>
-      <p class="footer__note">Sources citées dans chaque présentation.</p>
-    </div>
-    <nav class="footer__links" aria-label="Liens de fin">
-      <a class="footer__link" href="#a-propos">À propos</a>
-      <a class="footer__link" href="#voyage">Retour au livre</a>
-      <a class="pill glass footer__contact" href="https://github.com/ahlcome-del" target="_blank" rel="noopener noreferrer" aria-label="Profil GitHub (nouvel onglet)">GitHub <svg viewBox="0 0 7 12" aria-hidden="true"><path d="M1 1l5 5-5 5"/></svg></a>
-    </nav>
-  </div>
-</footer>
 
 <script type="module" src="js/main.js"></script>
 </body>
