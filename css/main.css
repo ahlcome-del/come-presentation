@@ -64,8 +64,16 @@ sup { font-size: .62em; line-height: 0; vertical-align: .55em; }
   background: var(--bg); transition: opacity .9s var(--ease), visibility 0s linear .9s;
 }
 .loader__mark { width: 74px; height: auto; aspect-ratio: 1323 / 2095; fill: transparent; stroke: var(--ink); stroke-width: 10; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 2.1s var(--ease) forwards, fillin .8s var(--ease) 1.5s forwards; }
-.loader__bar { width: 120px; height: 1px; background: var(--hairline); overflow: hidden; }
-.loader__bar span { display: block; height: 100%; width: 100%; background: var(--ink-2); transform-origin: 0 50%; transform: scaleX(0); transition: transform .5s var(--ease); }
+.loader__bar { position: relative; width: 120px; height: 1px; background: var(--hairline); overflow: hidden; }
+.loader__bar span { position: relative; z-index: 1; display: block; height: 100%; width: 100%; background: var(--ink-2); transform-origin: 0 50%; transform: scaleX(0); transition: transform .5s var(--ease); }
+/* The autonomous fill. It runs on the compositor, so it keeps moving even while the
+   main thread is busy building the 3D scene (that long synchronous block is exactly
+   what used to leave the bar parked mid-way). The JS value can only overtake it. */
+.loader__bar::after {
+  content: ""; position: absolute; inset: 0; background: var(--ink-2); transform-origin: 0 50%;
+  transform: scaleX(0); animation: barfill 3.2s cubic-bezier(.16, .72, .3, 1) forwards;
+}
+@keyframes barfill { 0% { transform: scaleX(0); } 55% { transform: scaleX(.62); } 100% { transform: scaleX(.9); } }
 .loader.is-done { opacity: 0; visibility: hidden; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes fillin { to { fill: var(--ink); stroke-width: 0; } }
@@ -150,7 +158,11 @@ html.liquid .glass[data-liquid] {
 .progress.is-hidden { opacity: 0; pointer-events: none; }
 
 /* ---------- Voyage / pinned stage ---------- */
-.voyage { position: relative; height: 1100vh; z-index: 3; }
+.voyage { position: relative; height: 1580vh; z-index: 3; }
+/* the journey is one pinned stage whose length sets how long each era stays on
+   screen (≈ 200 vh per era on desktop). Narrow screens scroll faster under the
+   thumb, so the tall stage would only add wrist-work: shorten it there. */
+@media (max-width: 768px) { .voyage { height: 1150vh; } }
 .stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; pointer-events: none; }
 .stage a, .stage button { pointer-events: auto; }
 .chapter { position: absolute; left: var(--gutter); right: var(--gutter); max-width: 980px; opacity: 0; visibility: hidden; }
@@ -252,7 +264,8 @@ html.js .rv-io.is-in { opacity: 1; transform: none; filter: none; }
 .footer__meta { margin: 0; font-size: 12.5px; color: var(--muted); }
 .noscript { color: var(--ink-2); }
 
-/* ---------- Static mode: reduced motion or no WebGL ---------- */
+/* ---------- Static mode: ONLY when WebGL is unavailable ----------
+   (a prefers-reduced-motion setting must never flatten the journey) */
 html.static-mode .voyage { height: auto; }
 html.static-mode .stage { position: relative; height: auto; overflow: visible; pointer-events: auto; }
 html.static-mode .chapter { position: relative; inset: auto; left: auto; right: auto; top: auto; bottom: auto; opacity: 1; visibility: visible; min-height: 92vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 18vh var(--gutter) 12vh; max-width: none; transform: none !important; }
@@ -260,17 +273,24 @@ html.static-mode .chapter--chip { min-height: 70vh; align-items: center; }
 html.static-mode .chapter--open, html.static-mode .chapter--maps, html.static-mode .chapter--eras { justify-content: flex-start; padding-top: calc(var(--nav-h) + 12vh); }
 html.static-mode .chapter--lib { display: none; }
 html.static-mode .chapter .rv { opacity: 1 !important; transform: none !important; filter: none !important; }
-html.static-mode html.static-mode .grain { animation: none; }
+html.static-mode .grain { animation: none; }
 html.static-mode .progress { display: none; }
 html.no-webgl #scene { display: none; }
 html.no-webgl .static-art { display: block; position: absolute; z-index: 0; right: 6vw; top: 50vh; width: min(44vw, 520px); transform: translateY(-50%); opacity: .95; }
 html.no-webgl .chapter--chip, html.no-webgl .chapter--open, html.no-webgl .chapter--maps, html.no-webgl .chapter--eras, html.no-webgl .chapter--lib { display: none; }
 html.no-webgl .library { padding-top: 10vh; }
 
+/* Reduced motion: keep every transition that carries meaning, drop the decorative
+   loops (grain) and shorten the entrance fades. The scroll journey itself is
+   user-driven motion and stays exactly as it is. */
+html.reduced-motion .grain { animation: none; }
+html.reduced-motion .atmos { --grain-op: 0; }
+html.reduced-motion.is-ready .chapter--hero .rv { transition-duration: .35s; transition-delay: 0s !important; }
+html.reduced-motion .rv-io { transition-duration: .4s; transition-delay: 0s !important; }
+html.reduced-motion .card { transform: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
-  .loader__mark { fill: var(--ink); stroke-dashoffset: 0; }
-  .card { transform: none !important; }
+  .grain { animation: none; }
+  html.js .chapter--hero .rv { transition-duration: .35s; }
 }
 
 /* ---------- Responsive ---------- */
