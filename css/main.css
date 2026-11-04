@@ -158,11 +158,11 @@ html.liquid .glass[data-liquid] {
 .progress.is-hidden { opacity: 0; pointer-events: none; }
 
 /* ---------- Voyage / pinned stage ---------- */
-.voyage { position: relative; height: 1580vh; z-index: 3; }
+.voyage { position: relative; height: 2400vh; z-index: 3; }
 /* the journey is one pinned stage whose length sets how long each era stays on
    screen (≈ 200 vh per era on desktop). Narrow screens scroll faster under the
    thumb, so the tall stage would only add wrist-work: shorten it there. */
-@media (max-width: 768px) { .voyage { height: 1150vh; } }
+@media (max-width: 768px) { .voyage { height: 1750vh; } }
 .stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; pointer-events: none; }
 .stage a, .stage button { pointer-events: auto; }
 .chapter { position: absolute; left: var(--gutter); right: var(--gutter); max-width: 980px; opacity: 0; visibility: hidden; }
