@@ -6,14 +6,17 @@
  * any scroll jump glides instead of cutting. All objects are created in
  * init() — nothing is created or shown by callbacks.
  *
- *   0.00–0.13  the closed leather book floats, turns, the camera dollies in
- *   0.09–0.24  cover hinges open, pages riffle and curl
- *   0.22–0.36  the open book lies back; five pages lift out, unfold into maps;
- *              the camera flies over the book into the cloud of maps
- *   0.36–0.84  the maps glide ahead to five stations along a route; the camera
- *              travels a CatmullRom spline past each era: its map settles on the
- *              ground, the diorama assembles out of it, opens (cutaway), re-seats
- *   0.86–1.00  the camera rises and pulls back: all eras small along the route
+ *   0.00–0.046 the closed leather book floats, turns, the camera dollies in
+ *   0.044–0.086 cover hinges open
+ *   0.082–0.176 pages riffle: each sheet peels by its free edge and settles flat
+ *               on the left stack (~150 vh of scroll on desktop: time to read)
+ *   0.170–0.214 the open book lies back; the camera flies over it
+ *   0.146–0.272 the five plates lift out of the fan, unfold into maps, and glide
+ *               on ahead to their station
+ *   0.280–0.844 five eras, 0.125 apart (≈ 200 vh of scroll each on desktop): the
+ *               map settles, the diorama assembles out of it, opens (cutaway),
+ *               re-seats, then the camera moves on
+ *   0.872–1.00  the camera pulls back and enters the library
  */
 import * as THREE from './vendor/three.js';
 import { RoomEnvironment } from './vendor/three.js';
@@ -45,20 +48,20 @@ export const CONFIG = {
   maps: { desktop: [2048, 1418], mobile: [1280, 886] },
   // scroll ranges (progress units). Station i is closest to the camera at stations.first + i·step
   ranges: {
-    turn: [.04, .115],           // book turns to face camera, dolly in
-    cover: [.11, .18],          // cover hinge (with slight overshoot)
-    riffle: [.15, .245],        // pages riffle one after another
-    recline: [.225, .295],       // the open book lies back; the camera flies over it
-    bookGone: .5,
-    detach: [.232, .29],       // map plates lift out of the book…
-    unfold: [.255, .315],         // …and unfold to double width
-    plateStagger: .011,
-    toStation: [.355, .41],     // each plate glides ahead to hover over its station
-    settle: [-.064, -.036],      // …and lies down when the camera arrives (relative to station p)
-    assemble: [-.046, -.008],    // the era rises out of its map (staged, bottom → top)
+    turn: [.012, .046],          // book turns to face camera, dolly in
+    cover: [.044, .086],         // cover hinge (with slight overshoot)
+    riffle: [.082, .176],        // pages riffle one after another (~150 vh on desktop)
+    recline: [.170, .214],       // the open book lies back; the camera flies over it
+    bookGone: .30,
+    detach: [.146, .194],        // map plates lift out of the fan…
+    unfold: [.156, .192],        // …and unfold to double width
+    plateStagger: .008,
+    toStation: [.196, .240],     // each plate glides ahead to hover over its station
+    settle: [-.070, -.044],      // …and lies down when the camera arrives (relative to station p)
+    assemble: [-.040, -.004],    // the era rises out of its map (staged, bottom → top)
     explode: [-.006, .008, .016, .034],  // cutaway while the camera is closest
-    stations: { first: .46, step: .085 },
-    library: [.86, .97],
+    stations: { first: .310, step: .125 },   // 200 vh of scroll between two eras on desktop
+    library: [.872, .966],
   },
   world: {
     groundY: -1.6,
@@ -146,8 +149,8 @@ function makePageMaterial(map) {
    Scene
    ========================================================================= */
 export class StoryScene {
-  constructor(canvas, { mobile = false, reduced = false, onFrame = null } = {}) {
-    this.canvas = canvas; this.mobile = mobile; this.reduced = reduced; this.onFrame = onFrame;
+  constructor(canvas, { mobile = false, reduced = false, lite = false, onFrame = null } = {}) {
+    this.canvas = canvas; this.mobile = mobile; this.reduced = reduced; this.lite = lite; this.onFrame = onFrame;
     this.p = 0; this.target = 0; this.time = 0; this.running = false; this.dirty = true;
     this.mouse = new THREE.Vector2(); this.mouseT = new THREE.Vector2();
     this.disposables = [];
@@ -157,7 +160,19 @@ export class StoryScene {
   /* ---------- setup ---------- */
   async init(onProgress = () => {}) {
     const C = CONFIG;
-    const r = this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance', alpha: false });
+    // A weak Windows GPU can refuse a WebGL2 high-performance context (or an antialiased
+    // one) while still rendering fine without: try down the ladder instead of failing.
+    const mk = (o) => new THREE.WebGLRenderer(Object.assign({ canvas: this.canvas, alpha: false }, o));
+    let r = null;
+    const tries = this.lite
+      ? [{ antialias: false, powerPreference: 'low-power' }, { antialias: false, powerPreference: 'default' }]
+      : [{ antialias: true, powerPreference: 'high-performance' }, { antialias: false, powerPreference: 'high-performance' },
+         { antialias: false, powerPreference: 'default' }, { antialias: false, powerPreference: 'low-power' }];
+    for (const o of tries) {
+      try { r = mk(o); if (r.getContext()) break; } catch (e) { r = null; }
+    }
+    if (!r) throw new Error('WebGL context unavailable');
+    this.renderer = r;
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = C.lights.exposure;
@@ -166,7 +181,9 @@ export class StoryScene {
     this.shadows = !this.mobile && !/[?&]noshadow/.test(location.search);
     if (this.shadows) { r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap; }
     this.maxDpr = this.mobile ? C.dpr.mobile : C.dpr.desktop;
-    this.dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr);
+    const maxPx = this.mobile ? 2.4e6 : 3.6e6;                      // texture-memory guard (a weak GPU dies above this)
+    const dprFit = Math.sqrt(maxPx / Math.max(1, innerWidth * innerHeight));
+    this.dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, this.maxDpr, dprFit));
     r.setPixelRatio(this.dpr);
     this.aniso = Math.min(8, r.capabilities.getMaxAnisotropy());
 
@@ -478,7 +495,8 @@ export class StoryScene {
 
   /** generate the antique maps (async, idle slices) and swap them onto the plates */
   async loadMaps() {
-    const [w, h] = this.mobile ? CONFIG.maps.mobile : CONFIG.maps.desktop;
+    let [w, h] = this.mobile ? CONFIG.maps.mobile : CONFIG.maps.desktop;
+    if (this.lite) { w = Math.min(w, 1024); h = Math.round(w * 1418 / 2048); }   // weak GPU: half-size maps
     await generateMaps({
       width: w, height: h,
       onPlate: (i, cv) => {
@@ -493,6 +511,58 @@ export class StoryScene {
 
   /** progress at which the camera is closest to station i */
   stationP(i) { const S = CONFIG.ranges.stations; return S.first + i * S.step; }
+
+  /* riffle schedule ------------------------------------------------------
+     A sheet is in the air for `dur` units; sheet i starts `gap[i]` after the
+     previous one. The gaps are uneven — a hand turning paper is never
+     metronomic — but each stays inside (.92 … 1.16) < dur = 1.18, so exactly
+     one sheet is turning most of the time, two for a moment at the hand-over,
+     never three and never a lull with the book frozen mid-riffle.
+     Only every `stride`-th sheet is animated (half of them on desktop): the
+     skipped ones are invisible and their thickness is carried by their
+     neighbour, so the stacks still add up to the full block. That keeps one
+     turn on screen long enough to read as paper rather than a blur, and halves
+     the draw calls. Built once, from a fixed formula. */
+  makeRiffleSchedule() {
+    const N = this.N, stride = this.mobile ? 2 : 4, plates = new Set(this.plateIdx);
+    const idx = [], isPlate = [], w = [];
+    for (let i = 0; i < N; i++) if (plates.has(i) || i % stride === 0) { idx.push(i); isPlate.push(plates.has(i)); w.push(0); }
+    const nNorm = isPlate.filter((x) => !x).length || 1;
+    const wNorm = (N - this.plateIdx.length) / nNorm;              // pages a moving sheet stands for
+    isPlate.forEach((pl, k) => { w[k] = pl ? 1 : wNorm; });
+    const n = idx.length, dur = 1.18, start = new Array(n), gap = new Array(n);
+    let t = 0;
+    for (let k = 0; k < n; k++) {
+      start[k] = t;
+      // irregular but bounded: ±12 % around one gap, two incommensurate sines
+      gap[k] = clamp(1.04 + .075 * Math.sin(k * 1.7 + .4) + .045 * Math.sin(k * .53 + 1.1), .90, 1.17);
+      t += gap[k];
+    }
+    return { idx, isPlate, w, start, dur, total: start[n - 1] + dur, n, landZ: null };
+  }
+
+  /** where each sheet comes to rest: on the free face of the left stack AS IT WAS just
+      before that sheet arrived (the stack only grows afterwards, so the sheet is never
+      inside it). The left stack rides on the opened cover, so in the book's own frame
+      its free face sits at +ct/2 + (leaves already down)·dz. */
+  fillLandZ() {
+    const sch = this.riffleSchedule, dz = this.blockT / this.N, ct = CONFIG.book.cover;
+    let cum = 0;
+    sch.landZ = new Array(sch.n);
+    sch.landAt = new Array(sch.n);
+    for (let q = 0; q < sch.n; q++) {
+      if (sch.isPlate[q]) { sch.landZ[q] = 0; sch.landAt[q] = 0; continue; }   // a plate never joins the stack
+      sch.landAt[q] = cum;                                            // leaves down before this one
+      cum += sch.w[q];
+      // the sheet comes to rest on the pile as it is before this sheet joins it, a hair
+      // clear of the top; the pile then thickens by this one sheet's worth (a couple of
+      // pages: invisible), so no sheet is ever left floating above the stack
+      // the pile stands on the opened cover, so its top face is ct/2 + leaves·dz in the
+      // book's frame (blockT/2 would float the sheet a couple of centimetres above it)
+      sch.landZ[q] = ct / 2 + sch.landAt[q] * dz + .0018;
+    }
+    return sch.landZ;
+  }
 
   /* =======================================================================
      update(p): everything below is a deterministic function of progress p
@@ -518,40 +588,49 @@ export class StoryScene {
       this.bookHalo.scale.set(4.2, 4.2, 1); this.scene.add(this.bookHalo);
     }
     this.bookHalo.position.set(.1, .05 + floatY, -.8);
-    this.bookHalo.material.opacity = .3 * (1 - smootherstep(.12, .2, p)) * (.75 + .25 * turn);
+    this.bookHalo.material.opacity = .3 * (1 - smootherstep(.09, .145, p)) * (.75 + .25 * turn);
     this.bookHalo.visible = this.bookHalo.material.opacity > .002;
 
     /* cover hinge: 0 → 160° with slight overshoot (stays on the spine pivot) */
     const cv = range(R.cover, p);
-    const coverPhi = THREE.MathUtils.degToRad(160) * clamp(backOut(cv, .9), 0, 1.04);
+    const coverPhi = THREE.MathUtils.degToRad(180) * clamp(backOut(cv, .9), 0, 1.055);
     this.frontPivot.rotation.y = -coverPhi;
     this.bookInner.position.x = lerp(-W / 2, -.04, smooth(clamp(cv * 1.15)));
 
-    /* riffle: pages turn one after another, curling as they go */
-    const N = this.N, K = this.mobile ? 5 : 8;
-    const rr = range(R.riffle, p) * (N + K);
-    let lifted = 0, landed = 0;
+    /* riffle: pages turn one after another, curling as they go.
+       The schedule is built once (see makeRiffleSchedule): uneven gaps, each page
+       in the air a little longer than one gap, so one sheet is turning almost all
+       the time and two only at the hand-over. Every page follows the same
+       lift → swing → settle curve, and both stacks grow continuously (no step when
+       a sheet lands: a sheet only counts once it is lying flat). */
+    const N = this.N;
+    const sch = this.riffleSchedule || (this.riffleSchedule = this.makeRiffleSchedule());
+    const n = sch.n, rr = range(R.riffle, p) * sch.total;
     const dz = this.blockT / N;
     const fan = [34, 58, 82, 106, 130].map((d) => THREE.MathUtils.degToRad(d));
     const st = this.pageState || (this.pageState = []);
-    for (let i = 0; i < N; i++) {
-      const f = clamp((rr - i) / K);
-      if (f > 0) lifted++;
-      if (this.plateIdx.indexOf(i) < 0 && f >= 1) landed++;
+    let nL = 0, nP = 0;
+    for (let k = 0; k < n; k++) {
+      const i = sch.idx[k], f = clamp((rr - sch.start[k]) / sch.dur);
       st[i] = f;
+      if (sch.isPlate[k]) nP += sch.w[k] * f;                        // plates vacate their slot
+      // the stack rises a beat after the sheet: the descent (g, below) is already
+      // underway, so at no point does the stack top catch up with a sheet still in flight
+      else nL += sch.w[k] * smootherstep(.80, 1, f);
     }
-    const thickR = Math.max(.002, (N - lifted) * dz), thickL = Math.max(.0001, landed * dz);
+    const thickR = Math.max(.0012, (N - nL - nP) * dz), thickL = Math.max(.0006, nL * dz);
+    sch.landZ || this.fillLandZ();
     this.rightBlock.scale.z = thickR;
     this.rightBlock.position.set(.01 + this.pw / 2, 0, -T / 2 + ct + thickR / 2);
-    this.leftBlock.scale.z = thickL; this.leftBlock.visible = landed > 0;
+    this.leftBlock.scale.z = thickL; this.leftBlock.visible = thickL > .0015;
     this.leftBlock.position.set(.01 + this.pw / 2, 0, -ct / 2 - thickL / 2);
     const zTopR = -T / 2 + ct + thickR;
     _v.set(0, 0, -ct / 2 - thickL).applyAxisAngle(_v2.set(0, 1, 0), -coverPhi).add(this.frontPivot.position);
     const lhx = _v.x, lhz = _v.z;
     root.updateMatrixWorld(true);
-    for (let i = 0; i < N; i++) {
-      const f = st[i], e = EASE_IO(f);
-      const k = this.plateIdx.indexOf(i);
+    for (let q = 0; q < n; q++) {
+      const i = sch.idx[q], f = st[i];
+      const k = sch.isPlate[q] ? this.plateIdx.indexOf(i) : -1;
       if (k >= 0) {                                   // the five plates stop in a fan
         _m.makeRotationY(-fan[k] * EASE(f)).setPosition(0, 0, zTopR + .003 + k * .001);
         this.plates[k].fan.multiplyMatrices(this.bookInner.matrixWorld, _m);
@@ -559,12 +638,21 @@ export class StoryScene {
         continue;
       }
       const m = this.pages[i];
-      m.visible = root.visible && f > 0 && f < 1;
+      m.visible = root.visible && f > 0 && f < .988;   // from .988 on the block itself carries it
       if (!m.visible) continue;
-      const curl = -1.25 * Math.sin(Math.PI * e) * (1 - .3 * e);
+      // rotation: accelerate out of the hand, decelerate into the stack — zero speed
+      // at both ends, so the lift never snaps and the landing never knocks
+      const e = smootherstep(0, .84, f);
+      // descent: the hinge stays on the right-hand stack while the sheet is still
+      // standing and only travels across as the sheet comes flat — the same curve as
+      // the stack growth, so a sheet always rests exactly on the leaves beneath it
+      const g = smootherstep(.30, .90, f);
+      // the free edge leads: the sheet bows up strongly as it peels (peak in the first
+      // third of the swing) and is dead flat when it comes down on the stack
+      const bow = Math.sin(Math.PI * Math.pow(f, .55)) * (1 - .35 * e);
       m.material.userData.u.uTheta.value = coverPhi * e;
-      m.material.userData.u.uK.value = curl / this.pw;
-      m.position.set(lerp(0, lhx, e), 0, lerp(zTopR + .002, lhz, e));
+      m.material.userData.u.uK.value = (.95 * bow) / this.pw;
+      m.position.set(lerp(0, lhx, g), 0, lerp(zTopR + .0015 + (q % 3) * .0011, sch.landZ[q], g));
     }
 
     /* warm light spilling out of the open book — peaks as the camera flies over it */
@@ -585,9 +673,9 @@ export class StoryScene {
     const pre = this._pre || (this._pre = []);
     this.assembleVals.forEach((a, i) => { const sp = this.stationP(i); pre[i] = Math.max(a, smootherstep(sp - (i > 0 ? .1 : .085), sp - .03, p)); });
     this.props.update(p, t, pre);
-    this.library.visible = p > .72;                                          // fully fogged before that
-    this.library.userData.setInside(smootherstep(.95, .975, p));
-    this.library.userData.flicker(t, smootherstep(.81, .87, p));
+    this.library.visible = p > .70;                                          // fully fogged before that
+    this.library.userData.setInside(smootherstep(.945, .975, p));
+    this.library.userData.flicker(t, smootherstep(.79, .85, p));
     this.updateAtmosphere(p);
     this.updateCamera(p, t);
   }
@@ -609,7 +697,7 @@ export class StoryScene {
   }
   updateScraps(p, t) {
     if (!this.scraps) return;
-    const on = smoothstep01(.3, .35, p) * (1 - smoothstep01(.44, .5, p));
+    const on = smoothstep01(.198, .235, p) * (1 - smoothstep01(.30, .355, p));
     const idle = this.reduced ? 0 : 1;
     for (const q of this.scraps) {
       q.m.visible = on > .01;
@@ -731,7 +819,7 @@ export class StoryScene {
     const x = clamp((p - sp0 + step * .5) / step, 0, A.length - 1);       // continuous era index
     const i = Math.floor(x), f = smooth(x - i);
     const a = A[i], b = A[Math.min(A.length - 1, i + 1)];
-    const into = smootherstep(.27, sp0 - .03, p);                           // from the dark study into the open landscape
+    const into = smootherstep(.24, sp0 - .03, p);                           // from the dark study into the open landscape
     const mixC = (key, out) => out.setHex(a[key]).lerp(_c1.setHex(b[key]), f);
     const haze = this._haze || (this._haze = new THREE.Color()), glow = this._glow || (this._glow = new THREE.Color()), top = this._top || (this._top = new THREE.Color());
     mixC('fog', haze).lerp(_c1.setHex(C.colors.bg), 1 - into);
@@ -779,14 +867,14 @@ export class StoryScene {
     const K = (p, pos, look) => keys.push({ p, pos, look });
     // book
     K(0, V3(0, .3, 6.5), V3(0, 0, 0));
-    K(.055, V3(0, .38, 6.1), V3(0, 0, 0));
-    K(.14, V3(0, 1.9, 7.6), V3(0, -.12, 0));
-    K(.215, V3(0, 1.8, 7.0), V3(0, -.12, 0));
+    K(.020, V3(0, .38, 6.1), V3(0, 0, 0));
+    K(.095, V3(0, 1.9, 7.6), V3(0, -.12, 0));      // cover open, pages riffle
+    K(.180, V3(0, 1.8, 7.0), V3(0, -.12, 0));      // last page down
     // over the reclining open book, into the cloud of maps
-    K(.275, V3(0, 2.25, 4.0), V3(0, .25, -2.6));
-    K(.315, V3(.3, 1.5, 1.2), V3(.75, .45, -5));
-    K(.355, V3(.35, 1.05, -1.6), V3(.4, .5, -8));
-    K(.395, V3(0, .45, -6.4), V3(st[0].pos.x * .5, G + .9, st[0].pos.z));
+    K(.215, V3(0, 2.25, 4.0), V3(0, .25, -2.6));
+    K(.245, V3(.3, 1.5, 1.2), V3(.75, .45, -5));
+    K(.262, V3(.35, 1.05, -1.6), V3(.4, .5, -8));
+    K(.274, V3(0, .45, -6.4), V3(st[0].pos.x * .5, G + .9, st[0].pos.z));
     // stations
     st.forEach((s, i) => {
       const sp = this.stationP(i), S = s.pos, sg = Math.sign(S.x);
@@ -851,13 +939,13 @@ export class StoryScene {
     if (Math.abs(roll) > 1e-5) cam.rotateZ(roll);
 
     // frame the subject away from the headlines (hero / opening), then centre
-    const release = 1 - EASE(range([.22, .3], p));
-    const sx = lerp(.2, .17, EASE(range([.06, .14], p))) * release;
-    const sy = smooth(range([.08, .14], p)) * release * .13;
+    const release = 1 - EASE(range([.205, .268], p));
+    const sx = lerp(.2, .17, EASE(range([.03, .085], p))) * release;
+    const sy = smooth(range([.05, .10], p)) * release * .13;
     const w0 = this.width, h0 = this.height;
     let ox = 0, oy = 0;
     if (a >= 1) { ox = -w0 * sx; oy = -h0 * sy; }
-    else oy = -h0 * lerp(.12, .1, EASE(range([.06, .14], p))) * release;
+    else oy = -h0 * lerp(.12, .1, EASE(range([.03, .085], p))) * release;
     oy += h0 * .05 * smootherstep(.9, .98, p);
     if (Math.abs(ox) + Math.abs(oy) > .5) cam.setViewOffset(w0, h0, ox, oy, w0, h0); else cam.clearViewOffset();
   }
@@ -873,13 +961,17 @@ export class StoryScene {
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(.05, (now - this.last) / 1000); this.last = now;
       // library: halve the frame rate (the scene is a blurred backdrop)
-      if (this.p > .985 && Math.abs(this.target - this.p) < 1e-4 && (this._skip = !this._skip)) return;
+      if (!this.reduced && this.p > .985 && Math.abs(this.target - this.p) < 1e-4 && (this._skip = !this._skip)) return;
       if (!this.reduced) this.time += dt;
-      else if (!this.dirty) return;
+      // reduced: no idle clock, but the loop must keep running until p has actually
+      // reached the target — otherwise progress freezes one frame after each scroll
+      else if (!this.dirty && Math.abs(this.target - this.p) < 1e-5) return;
       // damped progress: any jump in scroll (scrollbar drag, End key, fast wheel) glides
       const d = this.target - this.p;
-      if (this.reduced || Math.abs(d) < 1e-5) this.p = this.target;
-      else this.p += d * (1 - Math.exp(-dt * CONFIG.damping));
+      // reduced motion: same damped follow, just a shorter lag (no hard cuts — a jump
+      // straight to the target on every wheel tick reads as a stutter, not as calm)
+      if (Math.abs(d) < 1e-5) this.p = this.target;
+      else this.p += d * (1 - Math.exp(-dt * (this.reduced ? 11 : CONFIG.damping)));
       this.frame();
       this.adapt(dt);
     };

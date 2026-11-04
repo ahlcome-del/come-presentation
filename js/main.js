@@ -4,7 +4,9 @@
  *  - preloader, library rendering, 3D scene (lazy-imported)
  *  - Lenis smooth scroll + GSAP ScrollTrigger master timeline (scrub) driving the scene
  *  - text overlays, era chips, progress indicator, keyboard, nav
- *  - static mode (prefers-reduced-motion / no WebGL): normal scroll, composed frames
+ *  - static mode (ONLY when WebGL is genuinely unavailable): normal scroll, composed frames
+ *  - reduced motion (OS setting) is a MODIFIER: the journey keeps running, only the
+ *    automatic motion (idle float, pointer parallax, grain) is toned down.
  */
 import { gsap, ScrollTrigger, Lenis } from './vendor/libs.js';
 import { renderLibrary } from './library.js';
@@ -12,6 +14,12 @@ import { supportsLiquid, initLiquid, initGlassPointer } from './glass.js';
 
 const html = document.documentElement;
 const params = new URLSearchParams(location.search);
+
+/* A reload always starts at the cover: never restore the previous scroll offset,
+   and drop any #anchor so the browser cannot jump into the library. */
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+window.scrollTo(0, 0);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches || params.has('reduced');
 const MOBILE = matchMedia('(max-width: 768px)').matches || matchMedia('(pointer: coarse)').matches;
 const $ = (s, r = document) => r.querySelector(s);
@@ -31,15 +39,46 @@ function bezier(x1, y1, x2, y2) {
 }
 const EASE = bezier(.28, .11, .32, 1);
 
-function hasWebGL() {
-  if (params.has('nowebgl')) return false;
-  try { const c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); }
-  catch { return false; }
+/*
+ * WebGL is the only thing that may drop the page into static mode. On Windows with
+ * an integrated GPU, WebGL2 can be missing or blacklisted while WebGL1 still works,
+ * so probe in order and remember what answered: webgl2 → webgl1. (three r169 can
+ * render on WebGL1; the renderer is created with a fallback anyway, see scene.js.)
+ */
+function probeWebGL() {
+  if (params.has('nowebgl')) return { ok: false, kind: null, reason: '?nowebgl' };
+  const c = document.createElement('canvas');
+  const opts = [{ failIfMajorPerformanceCaveat: false, antialias: true }, { antialias: false }, { powerPreference: 'low-power', antialias: false }];
+  for (const o of opts) {
+    for (const [kind, name] of [['webgl2', 'webgl2'], ['webgl1', 'webgl']]) {
+      try {
+        const gl = c.getContext(name, o);
+        if (gl && typeof gl.getParameter === 'function') return { ok: true, kind, reason: `ctx:${kind}` };
+      } catch (e) { /* try the next option */ }
+    }
+  }
+  return { ok: false, kind: null, reason: 'no-context' };
 }
 
 /* ------------------------------------------------------------ loader */
+/*
+ * The bar never waits on anything. It fills on its own clock (a damped ease-out
+ * reaching ~.9 in 3 s), and the real loading progress can only push it further:
+ * max() of the two, and never backwards. So a slow scene, a stuck font or a
+ * presentations.json that never resolves can no longer leave it parked mid-way.
+ */
 const loader = $('#loader'), bar = $('#loader-bar');
-const setBar = (x) => { if (bar) bar.style.transform = `scaleX(${clamp(x)})`; };
+const T0 = performance.now();
+let barVal = 0, barReal = 0;
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+const barTime = () => Math.min(.9, .92 * easeOut(clamp((performance.now() - T0) / 3000)));
+const paintBar = (x) => {
+  barVal = Math.max(barVal, clamp(x));
+  if (bar) bar.style.transform = `scaleX(${barVal.toFixed(4)})`;
+};
+const setBar = (x) => { barReal = Math.max(barReal, clamp(x)); paintBar(Math.max(barReal * .92, barTime())); };
+const barTick = setInterval(() => { const v = Math.max(barReal * .92, barTime()); if (v > barVal + 1e-4) paintBar(v); }, 80);
+setBar(0);
 
 /* ------------------------------------------------------------ state */
 const app = { scene: null, lenis: null, st: null, p: 0, ready: false, static: false };
@@ -48,10 +87,19 @@ window.__cp = app;   // handy for QA / debugging
 async function boot() {
   const t0 = performance.now();
   $('#year').textContent = String(new Date().getFullYear());
-  const webgl = hasWebGL();
+  const gl = probeWebGL();
+  const webgl = gl.ok;
   if (!webgl) html.classList.add('no-webgl');
-  app.static = REDUCED || !webgl;
+  // reduced motion must NEVER cost the user the journey: it only mutes the automatic
+  // motion (idle float, pointer parallax, grain) — see scene.js and css/main.css
+  app.static = !webgl;
+  app.reduced = REDUCED;
+  app.diag = { webgl, webglKind: gl.kind, webglReason: gl.reason, reduced: REDUCED, static: app.static,
+    reason: app.static ? `no-webgl (${gl.reason})` : REDUCED ? 'reduced-motion (scene kept)' : 'ok',
+    ua: navigator.userAgent, dpr: window.devicePixelRatio || 1 };
   if (app.static) html.classList.add('static-mode');
+  // the OS "reduce motion" preference only switches off the decorative loops
+  if (REDUCED) html.classList.add('reduced-motion');
   if (!MOBILE && supportsLiquid()) html.classList.add('liquid');
   if (MOBILE) html.classList.add('is-mobile');
 
@@ -73,34 +121,26 @@ async function boot() {
       app.scene = new StoryScene(canvas, { mobile: MOBILE, reduced: REDUCED, onFrame: onSceneFrame });
       await app.scene.init((x) => setBar(.3 + x * .6));
     } catch (err) {
-      console.error('[scene] WebGL init failed, static fallback', err);
+      console.warn('[scene] WebGL init failed, retrying a lighter renderer', err);
       app.scene = null;
-      html.classList.add('no-webgl', 'static-mode'); app.static = true;
+      try {
+        const { StoryScene } = await import('./scene.js');
+        app.scene = new StoryScene(canvas, { mobile: MOBILE, reduced: REDUCED, lite: true, onFrame: onSceneFrame });
+        await app.scene.init((x) => setBar(.3 + x * .6));
+        app.diag.reason += ' | lite renderer';
+      } catch (err2) {
+        // only here — no working 3D at all — does the page fall back to the static art
+        console.warn('[scene] no usable WebGL, static fallback', err2);
+        app.scene = null;
+        html.classList.add('no-webgl', 'static-mode');
+        app.static = true; app.diag.static = true; app.diag.reason = 'no-webgl (init failed)';
+      }
     }
   }
-  await libP;
-  setBar(1);
+  // the cards still fill in when they arrive; the loader does not wait for them past the cap
+  await Promise.race([libP, wait(1500)]);
 
-  // let the silhouette finish drawing (skipped with reduced motion)
-  const minTime = REDUCED ? 0 : 1900;
-  await wait(Math.max(0, minTime - (performance.now() - t0)));
-
-  if (app.scene) { app.scene.frame(); app.scene.start(); }
-  loader.classList.add('is-done');
-  html.classList.add('is-ready');
-  setTimeout(() => { $$('.chapter--hero .rv').forEach((el) => { el.style.transition = 'none'; el._o = null; }); app.heroSettled = true; }, 1500);
-
-  if (app.static) setupStatic(); else setupScroll();
-  setupReveal();
-  setupNav();
-  if (html.classList.contains('liquid')) initLiquid();
-  window.addEventListener('cp:slow', () => html.classList.remove('liquid'), { once: true });
-  initGlassPointer({ tilt: !REDUCED });
-  app.ready = true;
-
-  // maps are drawn in idle slices after first paint
-  if (app.scene) setTimeout(() => app.scene.loadMaps().catch((e) => console.warn('[maps]', e)), 300);
-  window.addEventListener('pagehide', () => app.scene?.dispose(), { once: true });
+  finishBoot();
 }
 
 /* ------------------------------------------------------------ scroll story */
@@ -127,7 +167,13 @@ function setupScroll() {
     ch, items: $$('.rv', ch), tin: parseFloat(ch.dataset.in), tout: parseFloat(ch.dataset.out), shown: null,
   }));
   setupKeyboard();
-  onProgress(app.st.progress || 0);
+  // a reload must land on the cover: kill any restored offset, re-measure the
+  // trigger, and take progress from the real scroll position (0), not a stale one
+  const toTop = () => { if (lenis.scroll !== 0) lenis.scrollTo(0, { immediate: true, force: true }); window.scrollTo(0, 0); };
+  toTop();
+  ScrollTrigger.refresh();
+  toTop();
+  onProgress(0);
 }
 
 function onProgress(p) {
@@ -158,29 +204,29 @@ function updateOverlays(p) {
     if (t.shown !== vis) { t.shown = vis; t.ch.style.visibility = vis ? 'visible' : 'hidden'; t.ch.style.opacity = vis ? '1' : '0'; }
   }
   // cinema letterbox during the journey
-  html.style.setProperty('--lb', (smoothstep(.3, .36, p) * (1 - smoothstep(.83, .88, p))).toFixed(3));
+  html.style.setProperty('--lb', (smoothstep(.262, .30, p) * (1 - smoothstep(.845, .885, p))).toFixed(3));
   // text scrim: on while the maps/eras copy or an era chip is on screen (they can sit over a busy frame)
   const scrim = Math.max(
-    smoothstep(.285, .305, p) * (1 - smoothstep(.355, .375, p)) * .8,
-    smoothstep(.386, .4, p) * (1 - smoothstep(.43, .45, p)) * .85,
+    smoothstep(.246, .262, p) * (1 - smoothstep(.322, .342, p)) * .8,
+    smoothstep(.352, .366, p) * (1 - smoothstep(.392, .412, p)) * .85,
     0,
   );
-  const chipOn = (p > .43 && p < .86) ? .42 : 0;
-  const sc = Math.max(scrim, chipOn * smoothstep(.43, .47, p) * (1 - smoothstep(.83, .87, p))).toFixed(3);
+  const chipOn = (p > .392 && p < .87) ? .42 : 0;
+  const sc = Math.max(scrim, chipOn * smoothstep(.392, .428, p) * (1 - smoothstep(.838, .876, p))).toFixed(3);
   if (html.style.getPropertyValue('--scrim') !== sc) html.style.setProperty('--scrim', sc);
   // library: the 3D becomes a blurred, dimmed backdrop
-  const lb = EASE(clamp((p - .88) / .1));
+  const lb = EASE(clamp((p - .885) / .1));
   const canvas = $('#scene');
   const f = lb > 0.001 ? `blur(${(lb * (MOBILE ? 1.6 : 2.4)).toFixed(2)}px) brightness(${(1 - lb * .2).toFixed(3)})` : '';
   if (canvas.style.filter !== f) canvas.style.filter = f;
   const fill = $('#progress-fill'); if (fill) fill.style.setProperty('--p', p.toFixed(4));
-  const idx = p < .27 ? 0 : p < .4 ? 1 : p < .86 ? 2 : 3;
+  const idx = p < .232 ? 0 : p < .345 ? 1 : p < .872 ? 2 : 3;
   $$('#progress button').forEach((b, i) => { b.classList.toggle('is-active', i === idx); b.setAttribute('aria-current', String(i === idx)); });
   $('#progress').classList.toggle('is-hidden', p > .97);
   // announce the era (and the chapter changes) politely, once each
-  const eraNow = p < .27 ? 'Le livre' : p < .4 ? 'Les cartes' : p < .86 ? 'Les époques' : 'La bibliothèque';
+  const eraNow = p < .232 ? 'Le livre' : p < .345 ? 'Les cartes' : p < .872 ? 'Les époques' : 'La bibliothèque';
   if (app.eraNow !== eraNow) { app.eraNow = eraNow; const st = $('#sr-status'); if (st) st.textContent = eraNow; }
-  $$('.nav__links a').forEach((a) => a.setAttribute('aria-current', String((a.hash === '#voyage' && p < .9) || (a.hash === '#bibliotheque' && p >= .9))));
+  $$('.nav__links a').forEach((a) => a.setAttribute('aria-current', String((a.hash === '#voyage' && p < .91) || (a.hash === '#bibliotheque' && p >= .91))));
 }
 
 /* era chips follow the projected front of each diorama base */
@@ -204,6 +250,8 @@ function onSceneFrame(scene) {
     c.el.style.filter = o < .99 ? `blur(${((1 - o) * 6).toFixed(2)}px)` : 'none';
   }
 }
+
+addEventListener('load', () => { if (!app.ready) return; if (app.lenis) app.lenis.scrollTo(0, { immediate: true, force: true }); }, { once: true });
 
 /* ------------------------------------------------------------ static mode */
 function setupStatic() {
@@ -272,7 +320,9 @@ function setupNav() {
     e.preventDefault();
     const y = id === 'voyage' ? 0 : target.getBoundingClientRect().top + window.scrollY;
     scrollToY(y);
-    history.replaceState(null, '', `#${id}`);
+    // keep the hash out of the URL: a reload would jump straight there
+    history.replaceState(null, '', location.pathname + location.search);
+    if (id !== 'voyage') app.navTarget = id;
     if (id !== 'voyage') { target.setAttribute('tabindex', '-1'); target.focus({ preventScroll: true }); }
   });
   $$('#progress button').forEach((b) => b.setAttribute('aria-current', 'false'));
@@ -306,8 +356,52 @@ function setupKeyboard() {
   });
 }
 
+/* ------------------------------------------------------------ finish (once) */
+/*
+ * Everything that must happen exactly once when the cover lifts: the bar completes,
+ * the silhouette's drawing animation is allowed to finish (2.1 s stroke + fill at
+ * 1.5 s, so ~2.4 s of display before the fade), the loader fades, and the story
+ * (scroll or static) is wired up. Safe to call twice: a hard safety timer and the
+ * normal end of boot() can race, and only the first one does the work.
+ */
+let finished = false;
+async function finishBoot() {
+  if (finished) return;
+  finished = true;
+  clearInterval(barTick);
+  barReal = 1; paintBar(1);                                  // visible full bar…
+  const minTime = REDUCED ? 700 : 2400;                      // …held while the mark draws itself
+  const left = Math.max(0, minTime - (performance.now() - T0));
+  if (left > 0) await wait(left);
+  // a scene whose init never got to build its camera path must not be started here:
+  // the safety net may fire while init() is still walking
+  if (app.scene && app.scene.renderer && app.scene.camKeys) { app.scene.frame(); app.scene.start(); }
+  html.classList.add('is-ready');
+  loader.classList.add('is-done');                           // fade only once the mark is drawn
+  setTimeout(() => { $$('.chapter--hero .rv').forEach((el) => { el.style.transition = 'none'; el._o = null; }); app.heroSettled = true; }, 1500);
+
+  if (app.static) setupStatic(); else setupScroll();
+  setupReveal();
+  setupNav();
+  if (html.classList.contains('liquid')) initLiquid();
+  window.addEventListener('cp:slow', () => html.classList.remove('liquid'), { once: true });
+  initGlassPointer({ tilt: !REDUCED });
+  app.ready = true;
+
+  // maps are drawn in idle slices after first paint
+  if (app.scene) setTimeout(() => app.scene.loadMaps().catch((e) => console.warn('[maps]', e)), 300);
+  window.addEventListener('pagehide', () => app.scene?.dispose(), { once: true });
+}
+
+/* absolute safety net: whatever hangs (a promise that never settles, a WebGL driver
+   that stalls, a font request), the cover lifts and the page becomes usable at 9 s */
+setTimeout(() => { if (!finished) finishBoot(); }, 9000);
+
 boot().catch((e) => {
   console.error(e);
-  loader?.classList.add('is-done');
-  html.classList.add('is-ready', 'static-mode');
+  // a thrown boot leaves no usable 3D: fall back to the composed static art
+  app.static = !app.scene;
+  if (app.diag) { app.diag.static = app.static; app.diag.reason = app.static ? 'boot error' : app.diag.reason; }
+  if (app.static) html.classList.add('static-mode');
+  finishBoot();
 });
