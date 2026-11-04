@@ -67,7 +67,7 @@ export const CONFIG = {
   },
   // the cloud of maps between the book and the first era: [x, y, z, rotY, rotZ, scale]
   cluster: {
-    wide: [[1.6, .4, -2.6, -.36, .02, .6], [2.2, 1.4, -4.0, -.42, -.02, .64], [.1, -.05, -4.6, .08, .015, .64], [1.6, .1, -6.0, -.25, .02, .7], [-1.45, -.25, -6.8, .35, -.02, .7]],
+    wide: [[1.6, .4, -2.6, -.36, .02, .6], [2.2, 1.4, -4.0, -.42, -.02, .64], [.62, -.15, -4.6, .08, .015, .6], [1.6, .1, -6.0, -.25, .02, .7], [-1.45, -.25, -6.8, .35, -.02, .7]],
     portrait: [[-.62, .95, -2.6, .3, .02, .36], [.72, 1.45, -3.7, -.3, -.02, .38], [-.3, 1.95, -5.3, .1, .015, .38], [.55, .2, -6.1, -.2, .02, .4], [-.8, .0, -7.4, .24, -.02, .4]],
   },
   // fog / background / key-light tint per era (very close to the page colour: a mood, not a colour cast)
@@ -794,7 +794,7 @@ export class StoryScene {
       // portrait, harbour: lean the approach towards the quay so the frame is never a bare disc
       const hl = !wide && i === 2 ? 1.5 : 0;
       K(sp - .03, V3(S.x * .2 - hl * .6, G + 2.05, S.z + 5.3), V3(S.x - hl, G + .5, S.z));
-      if (i === 1) K(sp, V3(S.x * .62, G + 1.5, S.z + 2.85), V3(S.x, G + .42, S.z - .05));   // castle: closer, centred
+      if (i === 1) K(sp, wide ? V3(S.x * .62, G + 1.5, S.z + 2.85) : V3(S.x * .55, G + 1.78, S.z + 3.55), V3(S.x, G + .42, S.z - .05));   // castle: closer, centred
       else K(sp, V3(S.x * .35, G + 1.62, S.z + 3.15), V3(S.x, G + .4, S.z - .05));
       K(sp + .02, V3(-S.x * .25, G + 2.1, S.z + 3.1), V3(lerp(S.x, nxt.x, .8), G + .45, lerp(S.z, nxt.z, .8)));
       // en route: already well on the way, looking at the next era as it rises
