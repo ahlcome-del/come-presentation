@@ -55,7 +55,8 @@ async function boot() {
   if (!MOBILE && supportsLiquid()) html.classList.add('liquid');
   if (MOBILE) html.classList.add('is-mobile');
 
-  const libP = renderLibrary($('#cards'));
+  // never let a slow presentations.json hold the loader: cap the wait, the cards still fill in when it arrives
+  const libP = Promise.race([renderLibrary($('#cards')).catch(() => {}), wait(6000)]);
   const fontsP = Promise.race([
     Promise.all(['700 40px "UnifrakturCook"', 'italic 400 20px "Source Serif 4"', '400 20px "Source Serif 4"', '500 20px "Libre Franklin"', '600 20px "Libre Franklin"']
       .map((f) => document.fonts.load(f))),
