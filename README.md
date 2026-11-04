@@ -1,15 +1,16 @@
 # Côme Presentation
 
-Portfolio of historical presentations — a static, framework-free website with a scroll-driven
+Portfolio of historical presentations — a static, framework-free website with a click-driven
 WebGL story (a book opens, its pages become antique maps, the maps become era dioramas) and a
-data-driven library of presentations on "liquid glass" cards.
+data-driven library of presentations on "liquid glass" cards. The journey itself never scrolls:
+one click moves to the next era.
 
 - Interface in French; each presentation keeps its own language (`lang` is set per title).
 - 100 % static: works on GitHub Pages as-is (`.nojekyll` included), relative paths only,
   so it also works under a sub-path such as `https://<user>.github.io/<repo>/`.
-- All libraries are **vendored** (pinned) in `js/vendor/`:
-  three@0.169.0 (+ RoomEnvironment, mergeGeometries), gsap@3.12.5 + ScrollTrigger,
-  lenis@1.3.27, d3-geo@3.1.1, topojson-client@3.1.0.
+- All runtime libraries are **vendored** (pinned) in `js/vendor/`:
+  a trimmed three@0.169.0, plus d3-geo@3.1.1 and topojson-client@3.1.0 in `libs.js`.
+  The legacy GSAP/ScrollTrigger/Lenis bundle is still present in `libs.js` but is no longer used.
 - Map data: Natural Earth via world-atlas@2.0.2 — fetched from jsDelivr, with local copies in
   `assets/data/` used automatically when offline.
 
@@ -59,9 +60,9 @@ python3 -m http.server 8790
 
 (any static server works: `npx serve`, `php -S localhost:8790`, …)
 
-Useful query switches for testing: `?reduced` (reduced-motion mode), `?nowebgl` (static
-fallback), `?glass=fallback` (disable the Chromium SVG refraction), `?noadapt` (disable the
-adaptive resolution).
+Useful query switches for testing: `?nofx` (disable the full-screen cinematic grade),
+`?reduced` (reduced-motion mode), `?nowebgl` (static fallback), `?glass=fallback` (disable
+the Chromium SVG refraction).
 
 ## Deploy (GitHub Pages)
 
@@ -80,14 +81,18 @@ site/
 ├── presentations.json    the library data
 ├── css/main.css          tokens, liquid glass, layout, static/fallback modes
 ├── js/
-│   ├── main.js           boot, loader, Lenis + GSAP master timeline, overlays, keyboard
-│   ├── scene.js          three.js scene — CONFIG object at the top (colours, timings, ranges)
+│   ├── main.js           boot, loader, click story (stations), panels, overlays, keyboard
+│   ├── scene.js          three.js scene — CONFIG at the top; camera splines; IBL/shadows; flyTo()
+│   ├── post.js           full-screen cinematic grade (warm veil, vignette, grain)
 │   ├── maps.js           antique map plates (d3-geo + topojson on canvas)
-│   ├── dioramas.js       five low-poly era dioramas (procedural)
-│   ├── textures.js       procedural leather, pages, endpaper, sprites
-│   ├── glass.js          liquid-glass refraction filters + pointer highlight / tilt
+│   ├── dioramas.js       five low-poly era dioramas (procedural), normal-mapped materials
+│   ├── props.js          landscape, harbour, figures, water normal animation
+│   ├── terrain.js        relief, coast, ridges, sky shader (sun disc)
+│   ├── library3d.js      the 3D library at the end of the road
+│   ├── textures.js       procedural leather, pages, endpaper, normal maps, sprites
+│   ├── glass.js          liquid-glass refraction filters + pointer highlight
 │   ├── library.js        cards from presentations.json, generated covers
-│   └── vendor/           three.js, libs.js (gsap, ScrollTrigger, lenis, d3-geo, topojson)
+│   └── vendor/           three.js (trimmed), libs.js (d3-geo, topojson; legacy gsap/Lenis unused)
 └── assets/
     ├── logo.svg          traced silhouette (cream)
     ├── og-image.jpg
@@ -103,11 +108,13 @@ units; reduced-motion frames use `data-key`.
 
 ## Accessibility & fallbacks
 
-- `prefers-reduced-motion`: no smooth scroll, no scrubbing; each chapter shows a static
-  composed 3D frame, normal page scroll.
-- No WebGL: static SVG book + silhouette, the library stays fully usable.
-- Real DOM text everywhere, landmarks, skip link, visible focus (brick ring), keyboard:
-  PageUp/PageDown, Space, arrows, Home/End; the progress ticks are buttons.
+- `prefers-reduced-motion`: the click journey is kept; flights are shorter, idle drift/parallax
+  and grain are removed.
+- No WebGL: static SVG book + silhouette; one click opens the library; the library stays fully
+  usable.
+- No page scroll in the journey: one full-screen button, one click per era. The library and
+  À propos are scrollable panels. Real DOM text everywhere, landmarks, skip link, visible focus
+  (brick ring), keyboard: arrows / PageUp / PageDown / Space, Home, End, Escape to close a panel.
 
 ## Materials (no plastic look)
 
@@ -117,12 +124,12 @@ All surfaces are matte and textured at runtime — no image files:
 - `bake()` adds per-vertex contact AO (darker where parts meet the base), ±4 % tone jitter per face, and world-space box-projected UVs so texel density is constant.
 - Paper (pages, plates) gets a faint warm emissive lift as a cheap subsurface-like sheen.
 
-## The journey (v2): one continuous camera flight
+## The journey (v2–v17): one station per click
 
-- `js/scene.js` is a pure function of one progress value `p`. Scroll only sets a *target*; the render loop
-  damps `p → target` every frame (`1 − e^(−dt·k)`, `CONFIG.damping`), so scrollbar drags, End/Home or fast
-  wheels glide through the story instead of cutting. Headlines, era captions, letterbox and backdrop blur are
-  computed from the same damped value (`main.js → updateOverlays`).
+- `js/scene.js` is a pure function of one progress value `p`. A click calls `flyTo(nextKey)`; the render
+  loop drives `p` with an eased cubic flight (3.6 s intro, 1.8 s between eras; 2.4/1.0 s reduced). Clicks
+  are ignored during a flight. There is no page scroll. Headlines, era captions, letterbox and grade are
+  computed from the same `p` (`main.js → updateOverlays`).
 - Everything (book, 5 map plates, 5 dioramas, ground, route) is built in `init()` and warmed up (shaders +
   textures) before the loader fades. Nothing is created or shown by scroll callbacks.
 - Camera: `buildCameraPath()` — two `CatmullRomCurve3` splines (position + look target) through keyframes
@@ -317,3 +324,22 @@ Run on 4 Nov 2026, around 04:10 Paris time, against the live site https://ahlcom
 - **Material:** gradient words get a one-shot specular sweep; cards no longer tilt (cover zoom + sheen instead); the footer becomes a colophon with À propos, Retour au livre and a GitHub pill.
 - **Scroll:** Lenis is calmer (1 s cubic glide, lower wheel/touch multipliers). The hard pauses are replaced by a guided catch-up in `scene.js` / `main.js`: when the raw target runs ahead of the scene by more than ~2 %, the scene lands on each era in turn (its `data-key`) and holds ~260 ms before continuing, so a fast flick or scrollbar jump cannot skip an era. Nav clicks, keys and End/Home bypass the guide; scroll input is never locked.
 - Files: `index.html`, `css/main.css`, `js/main.js`, `js/scene.js`, `js/library.js`, `js/glass.js`, `README.md`.
+
+## v17 — sans scroll, clic & rendu cinéma (4 nov. 2026)
+
+- **No scroll:** the document is one 100svh stage; `#progress`, the "Défiler" cue and Lenis/GSAP/ScrollTrigger
+  are gone. One full-screen `#advance` button: first click opens the book to Antiquity, then one click per era
+  (p .310 → .435 → .560 → .685 → .810); the last click opens the library panel. 3.6 s intro, 1.8 s between eras
+  (2.4/1.0 s reduced); clicks are ignored in flight.
+- **Panels:** Bibliothèque and À propos are fixed, scrollable, focus-managed panels; the nav opens them;
+  Escape/back closes; the stage is inert while open; the footer moved into À propos.
+- **Rendering:** PMREM IBL from the procedural sky, a sky shader with sun disc/halo, 2048 shadows on desktop
+  when the benchmark allows, procedural normal maps on materials and ground, an animated water normal map and
+  reflective water. `post.js` adds a full-screen grade (warm horizon veil, vignette, grain; desktop WebGL2;
+  `?nofx`). The vendored three.js is trimmed and has no render targets, so there is deliberately no
+  bloom/aberration pass.
+- **Fallbacks:** no WebGL → static SVG book + silhouette, click opens the library; reduced motion keeps the
+  click journey with shorter flights and no idle drift/grain; mobile keeps the era capsule. No horizontal
+  scroll at 1280×900 or 390×844; console clean; no `#progress`/`#cue`.
+- Files: `index.html`, `css/main.css`, `js/main.js`, `js/scene.js`, `js/post.js`, `js/textures.js`,
+  `js/dioramas.js`, `js/props.js`, `js/terrain.js`, `README.md`.
