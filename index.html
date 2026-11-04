@@ -20,6 +20,10 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Un livre ancien fermé, orné d'une silhouette, flottant dans la pénombre.">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Côme Presentation — L'histoire, présentée.">
+<meta name="twitter:description" content="Présentations historiques, en 3D, à explorer.">
+<meta name="twitter:image" content="assets/og-image.jpg">
+<meta name="robots" content="index, follow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@300;400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400;1,8..60,500&family=UnifrakturCook:wght@700&display=swap">
@@ -89,14 +93,15 @@
 <nav class="progress" id="progress" aria-label="Chapitres du voyage">
   <div class="progress__track"><span class="progress__fill" id="progress-fill"></span></div>
   <ol>
-    <li><button type="button" data-goto="0.02" style="--at:0.0">Livre</button></li>
-    <li><button type="button" data-goto="0.33" style="--at:0.33">Cartes</button></li>
-    <li><button type="button" data-goto="0.46" style="--at:0.66">Époques</button></li>
-    <li><button type="button" data-goto="library" style="--at:1">Bibliothèque</button></li>
+    <li><button type="button" data-goto="0.02" style="--at:0.0" aria-label="Aller au chapitre : Le livre">Livre</button></li>
+    <li><button type="button" data-goto="0.33" style="--at:0.33" aria-label="Aller au chapitre : Les cartes">Cartes</button></li>
+    <li><button type="button" data-goto="0.46" style="--at:0.66" aria-label="Aller au chapitre : Les époques">Époques</button></li>
+    <li><button type="button" data-goto="library" style="--at:1" aria-label="Aller à la bibliothèque">Bibliothèque</button></li>
   </ol>
 </nav>
 
 <main id="main">
+  <p id="sr-status" class="visually-hidden" role="status" aria-live="polite"></p>
   <!-- The scroll story: one tall section, a pinned 100vh stage -->
   <section id="voyage" class="voyage" aria-label="Voyage : du livre aux époques">
     <div class="stage">

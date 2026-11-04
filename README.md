@@ -226,3 +226,22 @@ lines, engraved relief, region names, corner rosettes and cartouche scroll-work,
   cane, satchel, briefcase) so silhouettes read at a glance.
 - Static mode on portrait (reduced motion / no WebGL): copy sits at the top of each chapter
   on a soft dusk scrim, so it never lies over the book.
+
+## Cinema, a fuller first era & readable copy (v9)
+
+- Camera: on arrival at an era the frame eases in ~4.5 % closer, holds, and keeps a barely-there
+  drift and a whisper of roll (pointer-led) — cinematic without a handheld wobble. Cut entirely
+  in reduced motion.
+- Haze layers parallax: the three ridge layers now slide against each other with camera motion
+  and the pointer, so the distance reads as air rather than a painted backdrop.
+- Maps flight: a handful of torn parchment scraps trail the plates between p .30 and .50.
+  Antiquity: a forum crowd of eleven toga figures on the steps, a ruined stoa behind the temple,
+  four olive trees and scrub on the plinth, a ribbed terracotta roof with ridge and gutters, a
+  warmer marble, and a shallow blue bay with a sand shore, foam line, beach rocks and caiques
+  beyond the temple — the Mediterranean the first era looks out on.
+- Era I props: olive groves, shrubs and standing columns added to the ring around the station.
+- Copy: era chips get a denser tint, a hairline and a text shadow; the journey headlines get a
+  triple text shadow; a soft radial scrim fades in behind the maps/eras copy and behind the chips.
+- Accessibility: progress buttons have aria-labels and aria-current, a polite live region
+  announces the chapter, focus rings stay visible inside glass panels and chips stay reachable
+  while focused, safe-area insets on the nav, progress and gutters, Twitter card + robots meta.
