@@ -253,3 +253,10 @@ lines, engraved relief, region names, corner rosettes and cartouche scroll-work,
 - Station, landscape and field placement avoid the bay (`inCoast`). Coast props are placed on the terrain after they are added.
 - Era II–V assembly starts slightly earlier: `[sp-.09, sp-.03]`.
 - Check: the harbour frames .55–.65 look the same as before. The 6-check run (best, 1280×800 laptop, mobile, RM, mobile RM, no-GL) plus the sequence: no errors, no horizontal scroll.
+
+## v11 — final polish
+
+- **Library:** warmer walnut (`0xb07f58`) and panelling (`0x7a5236`), stronger lamp halos (desk .62, sconces .42), and a soft light shaft from the tall window with 26 slow dust motes (14 on mobile). These are additive sprites, gated by the existing arrival factor `k`; no real-time lights were added.
+- **Maps flight (.33–.40):** the plates in the cloud are about 30 % larger and slightly closer (`CONFIG.cluster.wide` scales .6–.7). The headline stays readable.
+- **Castle (.545):** the arrival camera key for station 1 is closer and centred on the castle.
+- Check: the 6-check run (best, 1280×800, mobile, RM, mobile RM, no-GL) plus the sequence: no errors, no horizontal scroll.
