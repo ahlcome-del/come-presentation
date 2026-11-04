@@ -36,8 +36,8 @@ export function buildLibrary({ M, radialTex, mobile, origin }) {
   const H = 4.4, BAY = 1.0, SH = 10, D = .34, BACKZ = -3.2, SIDEX = 4.1, FRONTZ = 2.2;
   const shelfY = (k) => .22 + k * .41;
   const tex = (cv, rep = 1) => { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 4; return t; };
-  const walnut = M.wood.clone(); walnut.color = new THREE.Color(0x9a7a62);
-  const panel = M.wood.clone(); panel.color = new THREE.Color(0x6a5040);
+  const walnut = M.wood.clone(); walnut.color = new THREE.Color(0xb07f58);
+  const panel = M.wood.clone(); panel.color = new THREE.Color(0x7a5236);
 
   // lamps (positions in room space) – used for the halos and the baked light on the books
   const lamps = [];
@@ -205,7 +205,7 @@ export function buildLibrary({ M, radialTex, mobile, origin }) {
   const halos = [];
   lamps.forEach((l, i) => {
     const desk = !!l.desk, out = l.s < 1;
-    const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: desk ? 0xffb470 : 0xffa860, transparent: true, opacity: desk ? .5 : .36, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: desk ? 0xffb470 : 0xffa860, transparent: true, opacity: desk ? .62 : .42, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     const s = desk ? 1.5 : out ? .9 : 1.15; h.scale.set(s, s, 1); h.position.copy(l.p); if (!desk) h.position.z += l.p.z === BACKZ + .12 ? .12 : 0;
     group.add(h); halos.push({ h, o: h.material.opacity, ph: i * 1.7 });
   });
@@ -218,10 +218,26 @@ export function buildLibrary({ M, radialTex, mobile, origin }) {
   spill.position.set(0, -.255, FRONTZ + 2.4); group.add(spill); extra.push({ h: spill, o: .55 });
   const doorGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: 0xffa458, transparent: true, opacity: .32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   doorGlow.scale.set(2.6, 3.4, 1); doorGlow.position.set(0, 1.35, FRONTZ + .5); group.add(doorGlow);
+  // a soft shaft of light from the tall window, with a few slow dust motes drifting in it
+  const shaftM = new THREE.MeshBasicMaterial({ map: radialTex, color: 0x8a6a48, transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const shaft = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 3.6), shaftM);
+  shaft.position.set(0, 1.7, BACKZ + 1.3); shaft.rotation.x = -.5; group.add(shaft); extra.push({ h: shaft, o: .16 });
+  const motes = [], moteN = mobile ? 14 : 26, mr = rng(77);
+  for (let i = 0; i < moteN; i++) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex, color: 0xffd9a0, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    const sc = .025 + mr() * .03; m.scale.set(sc, sc, 1);
+    group.add(m); motes.push({ m, x: (mr() - .5) * 1.0, y: .6 + mr() * 2.6, z: BACKZ + .6 + mr() * 1.4, ph: mr() * 6.28, sp: .3 + mr() * .5 });
+  }
   // k: 0 far away (glows hidden, they ignore fog) → 1 on arrival
   group.userData.flicker = (t, k = 1) => {
     for (const x of halos) { x.h.visible = k > .01; x.h.material.opacity = k * x.o * (.94 + .06 * Math.sin(t * 2.3 + x.ph) * Math.sin(t * 3.7 + x.ph * 2)); }
     for (const x of extra) { x.h.visible = k > .01; x.h.material.opacity = k * x.o; }
+    for (const d of motes) {
+      d.m.visible = k > .01;
+      const u = t * .12 * d.sp + d.ph;
+      d.m.position.set(d.x + Math.sin(u) * .12, d.y + Math.sin(u * .7) * .15, d.z + Math.cos(u * .9) * .1);
+      d.m.material.opacity = k * .5 * (.6 + .4 * Math.sin(u * 2.1));
+    }
     doorGlow.visible = k * (1 - inside) > .01; doorGlow.material.opacity = .32 * k * (1 - inside);
   };
   let inside = 0;
