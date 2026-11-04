@@ -290,3 +290,9 @@ Run on 4 Nov 2026, around 04:10 Paris time, against the live site https://ahlcom
 - Mobile portrait, castle at 0.545: when the screen is portrait, the camera arrives a bit higher and further back, so the outer towers no longer touch the edges. The desktop and laptop camera is unchanged.
 - Desktop maps at 0.33–0.36: the middle map plate moved right (x 0.1 to 0.62) and is slightly smaller (scale 0.64 to 0.6), so there is clear space between it and the "Les pages deviennent des cartes" headline. The other plates keep their larger size.
 - The only code file changed is `site/js/scene.js`. Verification run of 4 Nov 2026, 04:45 Paris time (CET), served locally; captures are in `shots/v12/`. Results: desktop, laptop 1280x800, mobile 390, reduced motion, mobile reduced motion, no WebGL and the 20-frame sequence all PASS, with 0 console errors and no horizontal scroll.
+
+## v13 (two mobile-only fixes, then frozen)
+- Maps flight on portrait screens (p .30–.40): the portrait plate cluster moved lower and one plate a little larger, so the plates now sit below the "Les pages deviennent des cartes." headline instead of behind it. Only `CONFIG.cluster.portrait` in `site/js/scene.js` changed.
+- Era captions at 390 px: era name 15→17 px, years 11→12 px, caption line 14→15.5 px with line-height 1.45, brighter text and a slightly darker glass behind it. This is in the mobile media query in `site/css/main.css` only.
+- Desktop, laptop and the v12 mobile castle camera are untouched. The reduced-motion desktop captures are 0 px different from v12.
+- Verification run of 4 Nov 2026, 05:13 Paris time (CET), served locally; captures are in `shots/v13/`. Desktop, laptop 1280x800, mobile 390, reduced motion, mobile reduced motion, no WebGL and the 20-frame sequence all PASS, with 0 console errors and no horizontal scroll.
