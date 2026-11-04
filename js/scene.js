@@ -14,8 +14,8 @@
  *   0.146–0.272 the five plates lift out of the fan, unfold into maps, and glide
  *               on ahead to their station
  *   0.280–0.844 five eras, 0.125 apart (≈ 200 vh of scroll each on desktop): the
- *               map settles, the diorama assembles out of it, opens (cutaway),
- *               re-seats, then the camera moves on
+ *               map settles, the diorama assembles out of it; after the station,
+ *               the cutaway opens then re-seats as the camera leaves
  *   0.872–1.00  the camera pulls back and enters the library
  */
 import * as THREE from './vendor/three.js';
@@ -59,7 +59,7 @@ export const CONFIG = {
     toStation: [.196, .240],     // each plate glides ahead to hover over its station
     settle: [-.070, -.044],      // …and lies down when the camera arrives (relative to station p)
     assemble: [-.040, -.004],    // the era rises out of its map (staged, bottom → top)
-    explode: [-.006, .008, .016, .034],  // cutaway while the camera is closest
+    explode: [.006, .020, .028, .046],   // cutaway only after the station, as the camera leaves
     stations: { first: .310, step: .125 },   // 200 vh of scroll between two eras on desktop
     library: [.872, .966],
   },

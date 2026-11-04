@@ -179,8 +179,6 @@ function updateOverlays(p) {
       setTimeout(() => t.ch.classList.remove('is-lit'), 2800);
     }
   }
-  // cinema letterbox during the journey
-  html.style.setProperty('--lb', (smoothstep(.262, .30, p) * (1 - smoothstep(.845, .885, p))).toFixed(3));
   // text scrim: on while the maps/eras copy or an era chip is on screen
   const scrim = Math.max(
     smoothstep(.246, .262, p) * (1 - smoothstep(.322, .342, p)) * .8,
