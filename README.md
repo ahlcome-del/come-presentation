@@ -260,3 +260,33 @@ lines, engraved relief, region names, corner rosettes and cartouche scroll-work,
 - **Maps flight (.33–.40):** the plates in the cloud are about 30 % larger and slightly closer (`CONFIG.cluster.wide` scales .6–.7). The headline stays readable.
 - **Castle (.545):** the arrival camera key for station 1 is closer and centred on the castle.
 - Check: the 6-check run (best, 1280×800, mobile, RM, mobile RM, no-GL) plus the sequence: no errors, no horizontal scroll.
+
+## Final verification (v11)
+
+Run on 4 Nov 2026, around 04:10 Paris time, against the live site https://ahlcome-del.github.io/come-presentation/ (Puppeteer with SwiftShader, so a software GPU). Captures are in `shots/live/`.
+
+| Check | Result |
+|---|---|
+| index.html loads | PASS (HTTP 200, 17.3 KB) |
+| presentations.json loads | PASS (HTTP 200, 654 B) |
+| Desktop 1440x900, 10 frames | PASS, 0 errors |
+| Laptop 1280x800, 10 frames | PASS, 0 errors |
+| Mobile 390x844, 10 frames | PASS, 0 errors |
+| Reduced motion | PASS (static page with captions), 0 errors |
+| No WebGL (`?nogl`) | PASS (fallback renders), 0 errors |
+| 20-frame scroll sequence | PASS, 0 errors |
+| Console errors | PASS, none in any run |
+| Horizontal scroll | PASS (scrollWidth equals clientWidth in every run) |
+| Page weight | PASS: about 1.41 MB transferred on first load, 1.71 MB for the whole site/ folder (under 3 MB) |
+
+### Known issues
+- Real frame rate on weak integrated GPUs has not been measured. The headless tests use SwiftShader, so on slow machines the loader benchmark may switch shadows off.
+- Small diorama labels (for example "Moyen Âge") are hard to read at 390 px.
+- On mobile, the maps flight (around 0.35) shows the plates partly cropped behind the headline.
+- The library end frame is deliberately soft and blurred behind the cards, and the dust motes are subtle.
+- No tests were run in real Safari or iOS browsers. Only Chromium was used.
+
+## v12 (two small framing fixes, then frozen for good)
+- Mobile portrait, castle at 0.545: when the screen is portrait, the camera arrives a bit higher and further back, so the outer towers no longer touch the edges. The desktop and laptop camera is unchanged.
+- Desktop maps at 0.33–0.36: the middle map plate moved right (x 0.1 to 0.62) and is slightly smaller (scale 0.64 to 0.6), so there is clear space between it and the "Les pages deviennent des cartes" headline. The other plates keep their larger size.
+- The only code file changed is `site/js/scene.js`. Verification run of 4 Nov 2026, 04:45 Paris time (CET), served locally; captures are in `shots/v12/`. Results: desktop, laptop 1280x800, mobile 390, reduced motion, mobile reduced motion, no WebGL and the 20-frame sequence all PASS, with 0 console errors and no horizontal scroll.
