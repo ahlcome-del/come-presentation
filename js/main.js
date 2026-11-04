@@ -2,21 +2,20 @@
  * Côme Presentation — boot & orchestration.
  *  - feature detection (WebGL, reduced motion, mobile, Chromium liquid glass)
  *  - preloader, library rendering, 3D scene (lazy-imported)
- *  - Lenis smooth scroll + GSAP ScrollTrigger master timeline (scrub) driving the scene
- *  - text overlays, era chips, progress indicator, keyboard, nav
- *  - static mode (ONLY when WebGL is genuinely unavailable): normal scroll, composed frames
- *  - reduced motion (OS setting) is a MODIFIER: the journey keeps running, only the
- *    automatic motion (idle float, pointer parallax, grain) is toned down.
+ *  - a CLICK story: one click opens the book / moves to the next era, one
+ *    animation per click; the page itself never scrolls
+ *  - full-screen library / about panels, opened from the nav
+ *  - static mode (ONLY when WebGL is genuinely unavailable): one composed frame
+ *  - reduced motion (OS setting) is a MODIFIER: the journey keeps running, only
+ *    the automatic motion (idle float, pointer parallax, grain) is toned down.
  */
-import { gsap, ScrollTrigger, Lenis } from './vendor/libs.js';
 import { renderLibrary } from './library.js';
 import { supportsLiquid, initLiquid, initGlassPointer } from './glass.js';
 
 const html = document.documentElement;
 const params = new URLSearchParams(location.search);
 
-/* A reload always starts at the cover: never restore the previous scroll offset,
-   and drop any #anchor so the browser cannot jump into the library. */
+/* A reload always starts on the cover: never restore the previous position. */
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 window.scrollTo(0, 0);
@@ -27,23 +26,10 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 
-/** CSS-identical easing for GSAP: cubic-bezier(.28,.11,.32,1) */
-function bezier(x1, y1, x2, y2) {
-  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
-  return (x) => {
-    if (x <= 0) return 0; if (x >= 1) return 1;
-    let t = x;
-    for (let i = 0; i < 6; i++) { const e = ((ax * t + bx) * t + cx) * t - x, d = (3 * ax * t + 2 * bx) * t + cx; if (Math.abs(e) < 1e-5 || !d) break; t -= e / d; }
-    return ((ay * t + by) * t + cy) * t;
-  };
-}
-const EASE = bezier(.28, .11, .32, 1);
-
 /*
  * WebGL is the only thing that may drop the page into static mode. On Windows with
  * an integrated GPU, WebGL2 can be missing or blacklisted while WebGL1 still works,
- * so probe in order and remember what answered: webgl2 → webgl1. (three r169 can
- * render on WebGL1; the renderer is created with a fallback anyway, see scene.js.)
+ * so probe in order and remember what answered: webgl2 → webgl1.
  */
 function probeWebGL() {
   if (params.has('nowebgl')) return { ok: false, kind: null, reason: '?nowebgl' };
@@ -61,12 +47,8 @@ function probeWebGL() {
 }
 
 /* ------------------------------------------------------------ loader */
-/*
- * The bar never waits on anything. It fills on its own clock (a damped ease-out
- * reaching ~.9 in 3 s), and the real loading progress can only push it further:
- * max() of the two, and never backwards. So a slow scene, a stuck font or a
- * presentations.json that never resolves can no longer leave it parked mid-way.
- */
+/* The bar never waits on anything. It fills on its own clock, and the real
+   loading progress can only push it further: max() of the two, never backwards. */
 const loader = $('#loader'), bar = $('#loader-bar');
 const T0 = performance.now();
 let barVal = 0, barReal = 0;
@@ -81,29 +63,39 @@ const barTick = setInterval(() => { const v = Math.max(barReal * .92, barTime())
 setBar(0);
 
 /* ------------------------------------------------------------ state */
-const app = { scene: null, lenis: null, st: null, p: 0, ready: false, static: false };
-window.__cp = app;   // handy for QA / debugging
+const app = {
+  scene: null, ready: false, static: false, station: 0, flight: false, panel: null,
+  p: 0, reduced: REDUCED, mobile: MOBILE,
+};
+window.__cp = app;
+
+/* The click story. The numbers are the scene's existing progress keys:
+   0 the closed book → .310 Antiquité → .435 Moyen Âge → .560 Grandes découvertes
+   → .685 XIXe → .810 XXe. The library is a panel, not another camera station. */
+const STATIONS = [
+  { key: 0, name: 'Le livre' },
+  { key: .310, name: 'Antiquité' },
+  { key: .435, name: 'Moyen Âge' },
+  { key: .560, name: 'Grandes découvertes' },
+  { key: .685, name: 'XIXe siècle industriel' },
+  { key: .810, name: 'Début du XXe siècle' },
+];
 
 async function boot() {
-  const t0 = performance.now();
   $('#year').textContent = String(new Date().getFullYear());
   const gl = probeWebGL();
   const webgl = gl.ok;
   if (!webgl) html.classList.add('no-webgl');
-  // reduced motion must NEVER cost the user the journey: it only mutes the automatic
-  // motion (idle float, pointer parallax, grain) — see scene.js and css/main.css
   app.static = !webgl;
-  app.reduced = REDUCED;
   app.diag = { webgl, webglKind: gl.kind, webglReason: gl.reason, reduced: REDUCED, static: app.static,
     reason: app.static ? `no-webgl (${gl.reason})` : REDUCED ? 'reduced-motion (scene kept)' : 'ok',
     ua: navigator.userAgent, dpr: window.devicePixelRatio || 1 };
   if (app.static) html.classList.add('static-mode');
-  // the OS "reduce motion" preference only switches off the decorative loops
   if (REDUCED) html.classList.add('reduced-motion');
   if (!MOBILE && supportsLiquid()) html.classList.add('liquid');
   if (MOBILE) html.classList.add('is-mobile');
 
-  // never let a slow presentations.json hold the loader: cap the wait, the cards still fill in when it arrives
+  // never let a slow presentations.json hold the loader: cap the wait
   const libP = Promise.race([renderLibrary($('#cards')).catch(() => {}), wait(6000)]);
   const fontsP = Promise.race([
     Promise.all(['700 40px "UnifrakturCook"', 'italic 400 20px "Source Serif 4"', '400 20px "Source Serif 4"', '500 20px "Libre Franklin"', '600 20px "Libre Franklin"']
@@ -115,9 +107,9 @@ async function boot() {
   setBar(.3);
 
   if (webgl) {
+    const canvas = $('#scene');
     try {
       const { StoryScene } = await import('./scene.js');
-      const canvas = $('#scene');
       app.scene = new StoryScene(canvas, { mobile: MOBILE, reduced: REDUCED, onFrame: onSceneFrame });
       await app.scene.init((x) => setBar(.3 + x * .6));
     } catch (err) {
@@ -129,7 +121,6 @@ async function boot() {
         await app.scene.init((x) => setBar(.3 + x * .6));
         app.diag.reason += ' | lite renderer';
       } catch (err2) {
-        // only here — no working 3D at all — does the page fall back to the static art
         console.warn('[scene] no usable WebGL, static fallback', err2);
         app.scene = null;
         html.classList.add('no-webgl', 'static-mode');
@@ -137,126 +128,37 @@ async function boot() {
       }
     }
   }
-  // the cards still fill in when they arrive; the loader does not wait for them past the cap
   await Promise.race([libP, wait(1500)]);
-
   finishBoot();
 }
 
-/* ------------------------------------------------------------ scroll story */
-/*
- * Scroll only sets a TARGET progress. The scene damps its own progress towards it
- * every frame (see scene.js), and every overlay below (headlines, era captions,
- * letterbox, progress line, backdrop blur) is computed from that same damped value
- * in onSceneFrame — so text and 3D can never drift apart, and a fast scroll
- * simply glides through the journey.
- */
-function setupScroll() {
-  gsap.registerPlugin(ScrollTrigger);
-  // calmer glide: a slower cubic settle and lower multipliers, so one wheel notch
-  // never throws the story forward. The guide in scene.js catches fast scrolls.
-  const lenis = app.lenis = new Lenis({ duration: 1, easing: (t) => 1 - Math.pow(1 - t, 3), smoothWheel: true, wheelMultiplier: 1.8, touchMultiplier: 1.5 });
-  lenis.on('scroll', ScrollTrigger.update);
-  gsap.ticker.add((time) => lenis.raf(time * 1000));
-  gsap.ticker.lagSmoothing(0);
+/* ------------------------------------------------------------ overlays */
+let texts = [], eraKeys = [], eraNames = [];
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 
-  app.st = ScrollTrigger.create({
-    trigger: '#voyage', start: 'top top', endTrigger: '#bibliotheque', end: 'top top',
-    invalidateOnRefresh: true,
-    onUpdate: (self) => onProgress(self.progress),
-  });
+function initTexts() {
   texts = $$('.stage .chapter').filter((ch) => !ch.classList.contains('chapter--chip')).map((ch) => ({
     ch, items: $$('.rv', ch), tin: parseFloat(ch.dataset.in), tout: parseFloat(ch.dataset.out), shown: null,
   }));
-  setupGuide();
-  setupKeyboard();
-  // a reload must land on the cover: kill any restored offset, re-measure the
-  // trigger, and take progress from the real scroll position (0), not a stale one
-  const toTop = () => { if (lenis.scroll !== 0) lenis.scrollTo(0, { immediate: true, force: true }); window.scrollTo(0, 0); };
-  toTop();
-  ScrollTrigger.refresh();
-  toTop();
-  onProgress(0);
 }
-
-/* ------------------------------------------------------------ guided scroll */
-/*
- * The story must never lose an era to a fast flick. Scroll stays free (no input
- * lock, no forced new gesture): the scene asks this guide for its target every
- * frame, and when the raw target runs more than `gap` ahead, the guide lands on
- * the next era, holds it for `dwell`, then continues. Every era is visited, even
- * after a scrollbar jump. Explicit jumps (nav, keys, End) set a skip window and
- * fly straight there.
- */
-const guide = { stops: [], stop: null, dir: 0, arrivedAt: 0, skipUntil: 0, dwell: REDUCED ? 140 : 260, gap: MOBILE ? .024 : .02, arrive: .004 };
-app.guide = guide;
-let eraKeys = [], eraNames = [];
-
-function setupGuide() {
+function setupEras() {
   const chips = $$('.chapter--chip');
-  const keys = chips.map((ch) => parseFloat(ch.dataset.key)).filter((k) => Number.isFinite(k)).sort((a, b) => a - b);
-  guide.stops = keys.length ? keys : [.310, .435, .560, .685, .810];
-  eraKeys = keys;
+  eraKeys = chips.map((ch) => parseFloat(ch.dataset.key)).filter((k) => Number.isFinite(k)).sort((a, b) => a - b);
   eraNames = chips.map((ch) => $('.chip__era', ch)?.textContent.trim() || '');
-  app.scene?.setGuide(guideTarget);
 }
-
-function guideSkip(ms = 1600) {
-  guide.skipUntil = performance.now() + ms;
-  guide.stop = null; guide.dir = 0; guide.arrivedAt = 0;
-}
-
-function guideTarget(raw, p, now) {
-  raw = clamp(raw);
-  if (now < guide.skipUntil) { guide.stop = null; guide.dir = 0; guide.arrivedAt = 0; return raw; }
-  if (guide.stop !== null) {
-    const s = guide.stop;
-    if ((guide.dir > 0 && raw < s - .0005) || (guide.dir < 0 && raw > s + .0005)) {
-      guide.stop = null; guide.dir = 0; guide.arrivedAt = 0;
-    } else {
-      if (Math.abs(p - s) >= guide.arrive) { guide.arrivedAt = 0; return s; }
-      if (!guide.arrivedAt) guide.arrivedAt = now;
-      if (now - guide.arrivedAt < guide.dwell) return s;
-      guide.stop = null; guide.dir = 0; guide.arrivedAt = 0;
-    }
-  }
-  const gap = raw - p;
-  if (Math.abs(gap) < guide.gap) return raw;
-  const dir = Math.sign(gap);
-  let next = null;
-  if (dir > 0) {
-    for (const s of guide.stops) if (s > p + .0008 && s < raw - .0008) { next = s; break; }
-  } else {
-    for (let i = guide.stops.length - 1; i >= 0; i--) {
-      const s = guide.stops[i];
-      if (s < p - .0008 && s > raw + .0008) { next = s; break; }
-    }
-  }
-  if (next === null) return raw;
-  guide.stop = next; guide.dir = dir; guide.arrivedAt = 0;
-  return next;
-}
-
 function chapterLabel(p) {
   if (p < .232) return 'Le livre';
-  if (p < .345) return 'Les cartes';
+  if (p < .305) return 'Les cartes';
   if (p >= .872) return 'La bibliothèque';
   let i = 0;
   for (let k = 0; k < eraKeys.length; k++) if (p >= eraKeys[k] - .035) i = k;
   return eraNames[i] || 'Les époques';
 }
 
-function onProgress(p) {
-  app.target = p;
-  app.scene?.setProgress(p);
-}
-
-/* ------------------------------------------------------------ overlays (from damped p) */
-let texts = [];
-const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+let textsShown = false;
 function updateOverlays(p) {
   app.p = p;
-  // headlines: opacity + 12px + blur, staggered 0.004 progress per line (≈ 60–80 ms at reading speed)
+  // headlines: opacity + 12px + blur, staggered 0.004 progress per line
   for (const t of texts) {
     let vis = false;
     t.items.forEach((el, j) => {
@@ -279,7 +181,7 @@ function updateOverlays(p) {
   }
   // cinema letterbox during the journey
   html.style.setProperty('--lb', (smoothstep(.262, .30, p) * (1 - smoothstep(.845, .885, p))).toFixed(3));
-  // text scrim: on while the maps/eras copy or an era chip is on screen (they can sit over a busy frame)
+  // text scrim: on while the maps/eras copy or an era chip is on screen
   const scrim = Math.max(
     smoothstep(.246, .262, p) * (1 - smoothstep(.322, .342, p)) * .8,
     smoothstep(.352, .366, p) * (1 - smoothstep(.392, .412, p)) * .85,
@@ -288,27 +190,16 @@ function updateOverlays(p) {
   const chipOn = (p > .392 && p < .87) ? .42 : 0;
   const sc = Math.max(scrim, chipOn * smoothstep(.392, .428, p) * (1 - smoothstep(.838, .876, p))).toFixed(3);
   if (html.style.getPropertyValue('--scrim') !== sc) html.style.setProperty('--scrim', sc);
-  // library: the 3D becomes a blurred, dimmed backdrop
-  const lb = EASE(clamp((p - .885) / .1));
-  const canvas = $('#scene');
-  const f = lb > 0.001 ? `blur(${(lb * (MOBILE ? 1.6 : 2.4)).toFixed(2)}px) brightness(${(1 - lb * .2).toFixed(3)})` : '';
-  if (canvas.style.filter !== f) canvas.style.filter = f;
-  const fill = $('#progress-fill'); if (fill) fill.style.setProperty('--p', p.toFixed(4));
-  const idx = p < .232 ? 0 : p < .345 ? 1 : p < .872 ? 2 : 3;
-  $$('#progress button').forEach((b, i) => { b.classList.toggle('is-active', i === idx); b.setAttribute('aria-current', String(i === idx)); });
-  $('#progress').classList.toggle('is-hidden', p > .97);
-  // announce the era (and the chapter changes) politely, once each
-  const eraNow = p < .232 ? 'Le livre' : p < .345 ? 'Les cartes' : p < .872 ? 'Les époques' : 'La bibliothèque';
-  if (app.eraNow !== eraNow) { app.eraNow = eraNow; const st = $('#sr-status'); if (st) st.textContent = eraNow; }
-  updateNavState(p);
-  // first-screen cue, mobile chapter capsule
-  const cue = $('#cue'); if (cue) cue.style.setProperty('--cue', (1 - smoothstep(.001, .012, p)).toFixed(3));
+  // the mobile chapter capsule
   const pill = $('#era-pill');
   if (pill) {
     pill.style.setProperty('--pill-o', (smoothstep(.016, .028, p) * (1 - smoothstep(.858, .89, p))).toFixed(3));
     const label = chapterLabel(p), el = $('#era-pill-label');
     if (el && el.textContent !== label) el.textContent = label;
   }
+  // announce the chapter politely, once each
+  const eraNow = chapterLabel(p);
+  if (app.eraNow !== eraNow) { app.eraNow = eraNow; const st = $('#sr-status'); if (st && !app.panel) st.textContent = eraNow; }
 }
 
 /* era chips follow the projected front of each diorama base */
@@ -322,57 +213,120 @@ function onSceneFrame(scene) {
   for (const c of chips) {
     const a = anchors[c.i]; if (!a) continue;
     const o = a.z < 1 ? clamp(a.e) : 0;
-    const focused = c.el.contains(document.activeElement);
-    if (o <= 0.01 && !focused) { if (c.vis !== false) { c.el.style.visibility = 'hidden'; c.el.style.opacity = '0'; c.vis = false; } continue; }
+    if (o <= 0.01) { if (c.vis !== false) { c.el.style.visibility = 'hidden'; c.el.style.opacity = '0'; c.vis = false; } continue; }
     const w = c.el.offsetWidth || 300, h = c.el.offsetHeight || 90;
     const x = clamp(a.x - w / 2, 16, vw - w - 16), y = clamp(a.y + 18, 70, vh - h - (vw <= 768 ? 66 : 24));
     c.el.style.visibility = 'visible'; c.vis = true;
-    c.el.style.opacity = (focused ? Math.max(o, .35) : o).toFixed(3);
+    c.el.style.opacity = o.toFixed(3);
     c.el.style.transform = `translate3d(${x.toFixed(1)}px, ${(y + (1 - o) * 12).toFixed(1)}px, 0)`;
     c.el.style.filter = o < .99 ? `blur(${((1 - o) * 6).toFixed(2)}px)` : 'none';
   }
 }
 
-addEventListener('load', () => { if (!app.ready) return; if (app.lenis) app.lenis.scrollTo(0, { immediate: true, force: true }); }, { once: true });
-
-/* ------------------------------------------------------------ static mode */
-function setupStatic() {
-  const scene = app.scene;
-  const canvas = $('#scene');
-  if (!scene) return;
-  let current = -1;
-  const show = (key) => {
-    if (key === current) return; current = key;
-    canvas.style.opacity = '0';
-    setTimeout(() => {
-      scene.setProgress(key);
-      canvas.style.filter = key > .9 ? 'blur(2.4px) brightness(.8)' : 'none';
-      canvas.style.opacity = '1';
-    }, 260);
-  };
-  // the picture always follows the chapter whose centre is closest to the viewport centre,
-  // so a caption is never shown over the previous era's picture
-  $('#bibliotheque').dataset.key = '0.95';
-  const chapters = [...$$('.stage .chapter'), $('#bibliotheque')];
-  let raf = 0;
-  const pick = () => {
-    raf = 0;
-    const mid = innerHeight / 2; let best = null, bd = Infinity;
-    for (const ch of chapters) {
-      const r = ch.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > innerHeight) continue;
-      const d = Math.abs((r.top + r.bottom) / 2 - mid);
-      if (d < bd) { bd = d; best = ch; }
-    }
-    if (best) show(parseFloat(best.dataset.key));
-  };
-  addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(pick); }, { passive: true });
-  addEventListener('resize', pick);
-  requestAnimationFrame(pick);
-  scene.setProgress(.03);
+/* ------------------------------------------------------------ stations */
+function announce(name) {
+  const st = $('#sr-status'); if (st) st.textContent = name.replace(/<[^>]+>/g, '');
 }
 
-/* ------------------------------------------------------------ reveal on scroll */
+function updateAdvance() {
+  const btn = $('#advance'); if (!btn) return;
+  const next = STATIONS[app.station + 1];
+  let label;
+  if (app.static) label = 'Ouvrir la bibliothèque';
+  else if (!next) label = 'Ouvrir la bibliothèque';
+  else if (app.station === 0) label = 'Ouvrir le livre';
+  else label = `Passer à l’époque suivante : ${next.name}`;
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('aria-busy', String(!!app.flight));
+  btn.classList.toggle('is-flying', !!app.flight);
+}
+
+function flyToStation(index, duration) {
+  if (!STATIONS[index] || !app.scene) { app.station = index; updateAdvance(); return; }
+  app.flight = true;
+  updateAdvance();
+  app.scene.flyTo(STATIONS[index].key, duration, () => {
+    app.station = index;
+    app.flight = false;
+    updateAdvance();
+    announce(STATIONS[index].name);
+  });
+}
+
+function nextStation() {
+  if (app.panel || app.flight) return;
+  if (app.static || app.station >= STATIONS.length - 1) { openPanel('bibliotheque'); return; }
+  flyToStation(app.station + 1, app.station === 0 ? (REDUCED ? 2.4 : 3.6) : (REDUCED ? 1.0 : 1.8));
+}
+
+function prevStation() {
+  if (app.panel || app.flight || app.station <= 0) return;
+  flyToStation(app.station - 1, REDUCED ? 1.0 : 1.6);
+}
+
+function resetToCover() {
+  if (app.panel) closePanel();
+  if (app.static) { app.station = 0; updateAdvance(); return; }
+  if (app.station === 0 && !app.flight) return;
+  flyToStation(0, REDUCED ? 1.0 : 1.4);
+}
+
+/* ------------------------------------------------------------ panels */
+function openPanel(name) {
+  if (app.panel === name) return;
+  const panel = document.getElementById(name);
+  if (!panel) return;
+  $$('.panel').forEach((p) => {
+    if (p !== panel) { p.classList.remove('is-open'); p.inert = true; p.setAttribute('aria-hidden', 'true'); }
+  });
+  panel.classList.add('is-open');
+  panel.inert = false;
+  panel.removeAttribute('aria-hidden');
+  app.panel = name;
+  html.classList.add('panel-open');
+  const stage = $('#voyage'); if (stage) stage.inert = true;
+  panel.scrollTop = 0;
+  updateNavState();
+  updateAdvance();
+  const title = panel.querySelector('h2');
+  if (title) title.focus({ preventScroll: true });
+  history.replaceState(null, '', location.pathname + location.search);
+}
+
+function closePanel() {
+  if (!app.panel) return;
+  const panel = document.getElementById(app.panel);
+  if (panel) { panel.classList.remove('is-open'); panel.inert = true; panel.setAttribute('aria-hidden', 'true'); }
+  app.panel = null;
+  html.classList.remove('panel-open');
+  const stage = $('#voyage'); if (stage) stage.inert = false;
+  updateNavState();
+  updateAdvance();
+  const back = $('.nav__links a[href="#voyage"]') || $('.nav__brand');
+  back?.focus({ preventScroll: true });
+}
+
+/* ------------------------------------------------------------ stage */
+function setupStage() {
+  const advance = $('#advance');
+  advance?.addEventListener('click', nextStation);
+  updateOverlays(0);
+  app.scene?.setProgress(0);
+  app.scene?.frame();
+  updateAdvance();
+}
+
+function setupStatic() {
+  // no 3D: the composed static art stays, and a click opens the library
+  const advance = $('#advance');
+  advance?.addEventListener('click', nextStation);
+  app.scene?.setProgress(.03);
+  app.scene?.frame();
+  updateOverlays(0);
+  updateAdvance();
+}
+
+/* ------------------------------------------------------------ reveal */
 function setupReveal() {
   const io = new IntersectionObserver((entries) => {
     for (const en of entries) if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); }
@@ -381,28 +335,8 @@ function setupReveal() {
 }
 
 /* ------------------------------------------------------------ navigation */
-function scrollToY(y, opts = {}) {
-  const d = opts.duration ?? 1.8;
-  guideSkip(d * 1000 + 400);                                     // an explicit jump flies over the eras
-  if (app.lenis) {
-    app.lenis.start();
-    app.lenis.scrollTo(y, { duration: d, easing: EASE, ...opts });
-  } else window.scrollTo({ top: y, behavior: REDUCED ? 'auto' : 'smooth' });
-}
-function progressToY(p) {
-  const st = app.st;
-  if (!st) return 0;
-  return st.start + p * (st.end - st.start);
-}
-app.progressToY = progressToY;
-
-/* active nav link + sliding glass thumb; also used by static mode */
-function updateNavState(p) {
-  const about = $('#a-propos');
-  const lib = $('#bibliotheque');
-  let sec = 'voyage';
-  if (about && about.getBoundingClientRect().top < innerHeight * .58) sec = 'a-propos';
-  else if ((typeof p === 'number' && p >= .9) || (lib && lib.getBoundingClientRect().top < innerHeight * .58)) sec = 'bibliotheque';
+function updateNavState() {
+  const sec = app.panel || 'voyage';
   $$('.nav__links a').forEach((a) => a.setAttribute('aria-current', String(a.hash === `#${sec}`)));
   if (app.navActive !== sec) { app.navActive = sec; updateNavThumb(); }
 }
@@ -419,117 +353,90 @@ function updateNavThumb() {
 }
 
 function setupNavState() {
-  updateNavState(app.static ? undefined : app.p);
+  updateNavState();
   updateNavThumb();
-  const refresh = () => { updateNavState(app.static ? undefined : app.p); updateNavThumb(); };
-  addEventListener('resize', refresh, { passive: true });
-  if (app.static) addEventListener('scroll', () => updateNavState(), { passive: true });
-  // fonts can change the link widths after boot
+  addEventListener('resize', () => { updateNavState(); updateNavThumb(); }, { passive: true });
   if (document.fonts?.ready) document.fonts.ready.then(updateNavThumb);
-}
-
-function setupCue() {
-  const cue = $('#cue'); if (!cue) return;
-  let gone = false;
-  const hide = () => { if (gone) return; gone = true; cue.classList.add('is-gone'); };
-  addEventListener('wheel', hide, { passive: true, once: true });
-  addEventListener('touchstart', hide, { passive: true, once: true });
-  addEventListener('keydown', (e) => { if (/^(PageDown|PageUp|ArrowDown|ArrowUp|Home|End| )$/.test(e.key)) hide(); }, { passive: true });
-  addEventListener('scroll', () => { if (scrollY > 24) hide(); }, { passive: true });
 }
 
 function setupNav() {
   document.addEventListener('click', (e) => {
+    const close = e.target.closest('[data-close]');
+    if (close) { e.preventDefault(); closePanel(); return; }
     const a = e.target.closest('a[href^="#"]');
     if (!a) return;
     const id = a.getAttribute('href').slice(1);
-    const target = document.getElementById(id);
-    if (!target) return;
+    if (!document.getElementById(id)) return;
     e.preventDefault();
-    const y = id === 'voyage' ? 0 : target.getBoundingClientRect().top + window.scrollY;
-    scrollToY(y);
-    // keep the hash out of the URL: a reload would jump straight there
     history.replaceState(null, '', location.pathname + location.search);
-    if (id !== 'voyage') app.navTarget = id;
-    if (id !== 'voyage') { target.setAttribute('tabindex', '-1'); target.focus({ preventScroll: true }); }
+    if (id === 'voyage') { closePanel(); resetToCover(); }
+    else if (id === 'bibliotheque') openPanel('bibliotheque');
+    else if (id === 'a-propos') openPanel('a-propos');
   });
-  $$('#progress button').forEach((b) => b.setAttribute('aria-current', 'false'));
-  $$('#progress button').forEach((b) => b.addEventListener('click', () => {
-    const g = b.dataset.goto;
-    if (g === 'library') scrollToY($('#bibliotheque').getBoundingClientRect().top + window.scrollY);
-    else scrollToY(progressToY(parseFloat(g)));
-  }));
 }
 
 function setupKeyboard() {
   window.addEventListener('keydown', (e) => {
+    if (app.panel) {
+      if (e.key === 'Escape') { e.preventDefault(); closePanel(); }
+      return;                      // arrows/space stay available to scroll the panel
+    }
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     const t = e.target, tag = t.tagName;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || t.isContentEditable) return;
-    const lenis = app.lenis; if (!lenis) return;
-    const vh = innerHeight; let d = null;
+    if ((tag === 'BUTTON' || tag === 'A') && (e.key === ' ' || e.key === 'Enter')) return;
     switch (e.key) {
-      case 'PageDown': d = vh * .9; break;
-      case 'PageUp': d = -vh * .9; break;
-      case ' ': if (tag === 'BUTTON' || tag === 'A') return; d = (e.shiftKey ? -1 : 1) * vh * .9; break;
-      case 'ArrowDown': d = vh * .3; break;
-      case 'ArrowUp': d = -vh * .3; break;
-      case 'Home': e.preventDefault(); scrollToY(0, { duration: 1.4 }); return;
-      case 'End': e.preventDefault(); scrollToY(lenis.limit, { duration: 1.4 }); return;
-      default: return;
+      case 'ArrowRight': case 'ArrowDown': case 'PageDown': case ' ': case 'Enter':
+        e.preventDefault(); nextStation(); break;
+      case 'ArrowLeft': case 'ArrowUp': case 'PageUp':
+        e.preventDefault(); prevStation(); break;
+      case 'Home':
+        e.preventDefault(); resetToCover(); break;
+      case 'End':
+        e.preventDefault(); openPanel('bibliotheque'); break;
+      default: break;
     }
-    e.preventDefault();
-    guideSkip(900);                       // explicit key jump: do not stop on the eras
-    lenis.scrollTo(clamp(lenis.targetScroll + d, 0, lenis.limit), { duration: .7, easing: EASE });
   });
 }
 
 /* ------------------------------------------------------------ finish (once) */
-/*
- * Everything that must happen exactly once when the cover lifts: the bar completes,
- * the silhouette's drawing animation is allowed to finish (2.1 s stroke + fill at
- * 1.5 s, so ~2.4 s of display before the fade), the loader fades, and the story
- * (scroll or static) is wired up. Safe to call twice: a hard safety timer and the
- * normal end of boot() can race, and only the first one does the work.
- */
 let finished = false;
 async function finishBoot() {
   if (finished) return;
   finished = true;
   clearInterval(barTick);
-  barReal = 1; paintBar(1);                                  // visible full bar…
-  const minTime = REDUCED ? 700 : 2400;                      // …held while the mark draws itself
+  barReal = 1; paintBar(1);
+  const minTime = REDUCED ? 700 : 2400;
   const left = Math.max(0, minTime - (performance.now() - T0));
   if (left > 0) await wait(left);
-  // a scene whose init never got to build its camera path must not be started here:
-  // the safety net may fire while init() is still walking
+
+  initTexts();
+  setupEras();
+  // a scene whose init never got to build its camera path must not be started here
   if (app.scene && app.scene.renderer && app.scene.camKeys) { app.scene.frame(); app.scene.start(); }
   html.classList.add('is-ready');
-  loader.classList.add('is-done');                           // fade only once the mark is drawn
+  loader.classList.add('is-done');
   setTimeout(() => { $$('.chapter--hero .rv').forEach((el) => { el.style.transition = 'none'; el._o = null; }); app.heroSettled = true; }, 1500);
 
-  if (app.static) setupStatic(); else setupScroll();
+  if (app.static) setupStatic(); else setupStage();
   setupReveal();
   setupNav();
   setupNavState();
-  setupCue();
+  setupKeyboard();
   if (html.classList.contains('liquid')) initLiquid();
   window.addEventListener('cp:slow', () => html.classList.remove('liquid'), { once: true });
   initGlassPointer();
   app.ready = true;
 
-  // maps are drawn in idle slices after first paint
   if (app.scene) setTimeout(() => app.scene.loadMaps().catch((e) => console.warn('[maps]', e)), 300);
   window.addEventListener('pagehide', () => app.scene?.dispose(), { once: true });
 }
 
-/* absolute safety net: whatever hangs (a promise that never settles, a WebGL driver
-   that stalls, a font request), the cover lifts and the page becomes usable at 9 s */
+/* absolute safety net: the cover lifts and the page becomes usable at 9 s */
 setTimeout(() => { if (!finished) finishBoot(); }, 9000);
 
 boot().catch((e) => {
   console.error(e);
-  // a thrown boot leaves no usable 3D: fall back to the composed static art
   app.static = !app.scene;
   if (app.diag) { app.diag.static = app.static; app.diag.reason = app.static ? 'boot error' : app.diag.reason; }
   if (app.static) html.classList.add('static-mode');

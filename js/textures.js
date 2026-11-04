@@ -7,6 +7,44 @@ const rng = (seed) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
 function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
+/** Derive a tangent-space normal map from a grayscale/luminance source. */
+export function makeNormalMap(source, strength = 1, size = 256) {
+  const w = Math.min(size, source.width || size), h = Math.min(size, source.height || size);
+  const src = canvas(w, h), sx = src.getContext('2d');
+  sx.drawImage(source, 0, 0, w, h);
+  const data = sx.getImageData(0, 0, w, h).data;
+  const out = sx.createImageData(w, h), d = out.data;
+  const lum = (x, y) => {
+    const i = (((y + h) % h) * w + ((x + w) % w)) * 4;
+    return (data[i] * .299 + data[i + 1] * .587 + data[i + 2] * .114) / 255;
+  };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = (lum(x + 1, y) - lum(x - 1, y)) * strength;
+    const dy = (lum(x, y + 1) - lum(x, y - 1)) * strength;
+    const nx = -dx, ny = -dy, nz = 1, len = Math.hypot(nx, ny, nz);
+    const i = (y * w + x) * 4;
+    d[i] = (nx / len * .5 + .5) * 255;
+    d[i + 1] = (ny / len * .5 + .5) * 255;
+    d[i + 2] = (nz / len * .5 + .5) * 255;
+    d[i + 3] = 255;
+  }
+  sx.putImageData(out, 0, 0);
+  return src;
+}
+
+/** A tiling height field of small wind waves, turned into a water normal map. */
+export function makeWaterNormal(size = 256, seed = 211) {
+  const cv = canvas(size, size), c = cv.getContext('2d'), r = rng(seed), im = c.createImageData(size, size), d = im.data;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const u = x / size * Math.PI * 2, v = y / size * Math.PI * 2;
+    const h = Math.sin(u * 3 + v * 2) * .5 + Math.sin(u * 7 - v * 3) * .25 + Math.sin(u * 13 + v * 9) * .1 + (r() - .5) * .06;
+    const g = Math.round(128 + h * 55), i = (y * size + x) * 4;
+    d[i] = d[i + 1] = d[i + 2] = g; d[i + 3] = 255;
+  }
+  c.putImageData(im, 0, 0);
+  return makeNormalMap(cv, .7);
+}
+
 /** Fine monochrome grain, drawn with a blend mode over an existing canvas. */
 function grain(ctx, w, h, { amount = .12, seed = 3, mode = 'overlay', scale = 1 } = {}) {
   const t = canvas(256, 256), x = t.getContext('2d'), im = x.createImageData(256, 256), r = rng(seed);

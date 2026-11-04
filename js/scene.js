@@ -2,8 +2,8 @@
  * Côme Presentation — 3D scene (three.js r169, single fixed canvas).
  *
  * ONE continuous journey. The whole scene is a pure function of a single
- * number p ∈ [0,1]; the render loop damps p towards the scroll target, so
- * any scroll jump glides instead of cutting. All objects are created in
+ * number p ∈ [0,1]; one click starts an eased flight to the next station,
+ * so the page never scrolls. All objects are created in
  * init() — nothing is created or shown by callbacks.
  *
  *   0.00–0.046 the closed leather book floats, turns, the camera dollies in
@@ -19,7 +19,7 @@
  *   0.872–1.00  the camera pulls back and enters the library
  */
 import * as THREE from './vendor/three.js';
-import { RoomEnvironment } from './vendor/three.js';
+import { CinematicPass } from './post.js';
 import { PLATES, generateMaps } from './maps.js';
 import * as TX from './textures.js';
 import { buildDiorama, makeMaterials } from './dioramas.js';
@@ -28,7 +28,7 @@ import { buildTerrain, buildRidges, buildSky, setStations } from './terrain.js';
 import { buildLibrary } from './library3d.js';
 
 /* =========================================================================
-   CONFIG — colours, sizes, timings (scroll ranges in progress units)
+   CONFIG — colours, sizes, timings (ranges in progress units)
    ========================================================================= */
 export const CONFIG = {
   colors: {
@@ -151,7 +151,7 @@ function makePageMaterial(map) {
 export class StoryScene {
   constructor(canvas, { mobile = false, reduced = false, lite = false, onFrame = null } = {}) {
     this.canvas = canvas; this.mobile = mobile; this.reduced = reduced; this.lite = lite; this.onFrame = onFrame;
-    this.guide = null;
+    this.flight = null;
     this.p = 0; this.target = 0; this.time = 0; this.running = false; this.dirty = true;
     this.mouse = new THREE.Vector2(); this.mouseT = new THREE.Vector2();
     this.disposables = [];
@@ -192,14 +192,26 @@ export class StoryScene {
     scene.background = new THREE.Color(C.colors.bg);
     scene.fog = new THREE.Fog(C.colors.bg, C.fog.near, C.fog.far);
 
-    // PMREM from RoomEnvironment (no HDR file)
+    // A small procedural sky/ground panorama, prefiltered into the environment.
+    // Warm horizon + cool zenith + a soft sun: stone, copper, glass and water now
+    // pick up the same light as the sky instead of a neutral studio room.
+    const ec = document.createElement('canvas'); ec.width = 512; ec.height = 256;
+    const ex = ec.getContext('2d');
+    const eg = ex.createLinearGradient(0, 0, 0, 256);
+    eg.addColorStop(0, '#0c1114'); eg.addColorStop(.38, '#333833'); eg.addColorStop(.52, '#8d704f');
+    eg.addColorStop(.62, '#3a2b20'); eg.addColorStop(1, '#16110d');
+    ex.fillStyle = eg; ex.fillRect(0, 0, 512, 256);
+    const sun = ex.createRadialGradient(344, 92, 0, 344, 92, 92);
+    sun.addColorStop(0, 'rgba(255, 238, 202, 1)'); sun.addColorStop(.16, 'rgba(255, 209, 151, .92)');
+    sun.addColorStop(.46, 'rgba(221, 151, 92, .28)'); sun.addColorStop(1, 'rgba(221, 151, 92, 0)');
+    ex.fillStyle = sun; ex.fillRect(0, 0, 512, 256);
+    const envTex = new THREE.CanvasTexture(ec);
+    envTex.mapping = THREE.EquirectangularReflectionMapping; envTex.colorSpace = THREE.SRGBColorSpace;
     const pmrem = new THREE.PMREMGenerator(r);
-    const room = new RoomEnvironment();
-    this.envRT = pmrem.fromScene(room, .04);
+    this.envRT = pmrem.fromEquirectangular(envTex);
     scene.environment = this.envRT.texture;
-    scene.environmentIntensity = C.lights.env;
-    room.traverse((o) => { o.geometry?.dispose(); o.material?.dispose?.(); });
-    pmrem.dispose();
+    scene.environmentIntensity = .8;
+    envTex.dispose(); pmrem.dispose();
     onProgress(.25);
 
     // lights: warm key + cool rim + soft hemisphere
@@ -209,9 +221,9 @@ export class StoryScene {
     scene.add(key, rim, hemi);
     this.key = key;
     if (this.shadows) {
-      key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+      key.castShadow = true; key.shadow.mapSize.set(this.mobile ? 1024 : 2048, this.mobile ? 1024 : 2048);
       const sc = key.shadow.camera; sc.left = -2.1; sc.right = 2.1; sc.top = 2.1; sc.bottom = -2.1; sc.near = .5; sc.far = 16;
-      key.shadow.bias = -.0006; key.shadow.normalBias = .015; key.shadow.radius = 3;
+      key.shadow.bias = -.0006; key.shadow.normalBias = .015; key.shadow.radius = 4;
       scene.add(key.target);
     }
     this._keyOff = V3(-5, 4.6, 3.6).normalize().multiplyScalar(8);          // low, raking from the left: shadows fall across the base
@@ -221,6 +233,13 @@ export class StoryScene {
 
     this.camera = new THREE.PerspectiveCamera(C.camera.fov, 1, .08, 150);
     this.look = V3();
+
+    // cinematic post pass — desktop WebGL2 only, disabled with ?nofx
+    this.post = null;
+    if (!this.lite && !this.mobile && r.capabilities.isWebGL2 && !/[?&]nofx/.test(location.search)) {
+      try { this.post = new CinematicPass(r, scene, this.camera, { reduced: this.reduced }); }
+      catch (e) { console.warn('[post] disabled', e); this.post = null; }
+    }
 
     // shared soft textures
     this.radialTex = this.tex(TX.makeRadial(256), false);
@@ -236,6 +255,7 @@ export class StoryScene {
     onProgress(.9);
 
     this.resize();
+    this.post?.setSize(this.width, this.height, this.dpr);
     window.addEventListener('resize', this._onResize = () => this.resize(), { passive: true });
     if (!this.reduced && matchMedia('(pointer: fine)').matches) {
       window.addEventListener('pointermove', this._onPointer = (e) => {
@@ -356,8 +376,10 @@ export class StoryScene {
     setStations(this.stations.map((st) => st.pos));
     const gtex = this.tex(TX.makeGroundMap(this.mobile ? 512 : 1024));
     gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping; gtex.repeat.set(4.4, 16);
+    const gNormal = this.tex(TX.makeNormalMap(gtex.image, 1.35), false);
+    gNormal.wrapS = gNormal.wrapT = THREE.RepeatWrapping; gNormal.repeat.copy(gtex.repeat);
     const ground = buildTerrain({ groundY: G, mobile: this.mobile,
-      material: new THREE.MeshStandardMaterial({ map: gtex, bumpMap: gtex, bumpScale: 1.2, color: 0x9a8a72, roughness: 1, metalness: 0, envMapIntensity: .2 }) });
+      material: new THREE.MeshStandardMaterial({ map: gtex, normalMap: gNormal, normalScale: new THREE.Vector2(.75, .75), color: 0x9a8a72, roughness: .97, metalness: 0, envMapIntensity: .28 }) });
     // far ridges + sky dome: layered silhouettes fading into the era's haze
     this.ridges = buildRidges({ groundY: G }); this.scene.add(this.ridges);
     this.sky = buildSky(); this.scene.add(this.sky);
@@ -845,6 +867,7 @@ export class StoryScene {
     }
     this.ridges.visible = into > .01;
     this.key.color.setHex(a.key).lerp(_c1.setHex(b.key), f).lerp(_c1.setHex(C.colors.key), 1 - into);
+    if (su.uSunColor) su.uSunColor.value.copy(this.key.color);
     // the key light (and its shadow frustum) follows the era in view
     if (this.shadows) {
       const S = this.stations[clamp(Math.round((p - sp0) / step), 0, this.stations.length - 1)].pos;
@@ -952,10 +975,22 @@ export class StoryScene {
   }
 
   /* ---------- loop ---------- */
-  setProgress(p) { this.target = clamp(p); this.dirty = true; }
+  setProgress(p) { this.flight = null; this.target = clamp(p); this.dirty = true; }
 
-  /** Optional per-frame target guide (raw scroll target, current p, now) → target. */
-  setGuide(fn) { this.guide = fn || null; }
+  /** One click = one camera flight. p is driven directly by the eased time, never
+      by the exponential scroll damping, so the arrival is exact. */
+  flyTo(p, duration = 1.8, onDone = null) {
+    const to = clamp(p), from = this.p;
+    if (duration <= 0 || Math.abs(to - from) < 1e-5) {
+      this.p = this.target = to; this.flight = null; this.dirty = true;
+      this.frame();
+      onDone?.();
+      return;
+    }
+    this.flight = { from, to, start: performance.now(), dur: duration * 1000, onDone };
+    this.target = to; this.dirty = true;
+    if (!this.running) this.start();
+  }
 
   start() {
     if (this.running) return;
@@ -964,19 +999,30 @@ export class StoryScene {
       if (!this.running) return;
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(.05, (now - this.last) / 1000); this.last = now;
-      // library: halve the frame rate (the scene is a blurred backdrop)
-      if (!this.reduced && this.p > .985 && Math.abs(this.target - this.p) < 1e-4 && (this._skip = !this._skip)) return;
       if (!this.reduced) this.time += dt;
-      // reduced: no idle clock, but the loop must keep running until p has actually
-      // reached the target — otherwise progress freezes one frame after each scroll
-      else if (!this.dirty && Math.abs(this.target - this.p) < 1e-5) return;
-      // damped progress: any jump in scroll (scrollbar drag, End key, fast wheel) glides.
-      // The optional guide lands on each era first when the raw target runs ahead.
-      const target = this.guide ? this.guide(this.target, this.p, now) : this.target;
-      const d = target - this.p;
-      // reduced motion: same damped follow, just a shorter lag (no hard cuts — a jump
-      // straight to the target on every wheel tick reads as a stutter, not as calm)
-      if (Math.abs(d) < 1e-5) this.p = target;
+
+      // one click → one eased flight, with an exact arrival
+      if (this.flight) {
+        const f = this.flight;
+        const u = clamp((now - f.start) / f.dur);
+        const e = u * u * (3 - 2 * u);
+        this.p = f.from + (f.to - f.from) * e;
+        this.target = f.to;
+        this.frame();
+        this.adapt(dt);
+        if (u >= 1) {
+          this.p = f.to;
+          const done = f.onDone;
+          this.flight = null;
+          if (done) done();
+        }
+        return;
+      }
+
+      // reduced: no idle clock, but the loop keeps running until p reaches target
+      if (this.reduced && !this.dirty && Math.abs(this.target - this.p) < 1e-5) return;
+      const d = this.target - this.p;
+      if (Math.abs(d) < 1e-5) this.p = this.target;
       else this.p += d * (1 - Math.exp(-dt * (this.reduced ? 11 : CONFIG.damping)));
       this.frame();
       this.adapt(dt);
@@ -987,7 +1033,8 @@ export class StoryScene {
 
   frame() {
     this.update(this.p, this.time);
-    this.renderer.render(this.scene, this.camera);
+    if (this.post) this.post.render();
+    else this.renderer.render(this.scene, this.camera);
     this.dirty = false;
     if (this.onFrame) this.onFrame(this);
   }
@@ -1018,12 +1065,14 @@ export class StoryScene {
     const w = this.width = window.innerWidth, h = this.height = window.innerHeight;
     this.aspect = w / h;
     this.renderer.setSize(w, h, false);
+    this.post?.setSize(w, h, this.dpr);
     this.camera.aspect = this.aspect; this.camera.updateProjectionMatrix();
     this.dirty = true;
   }
 
   dispose() {
     this.stop();
+    this.post?.dispose();
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('pointermove', this._onPointer);
     document.removeEventListener('visibilitychange', this._onVis);

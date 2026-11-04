@@ -425,7 +425,10 @@ export class Props {
        grove on the slope above the sand. Everything follows the same shoreline function,
        so the waterline stays sharp from every camera angle. */
     // water: one sheet from just inside the shoreline out into the fog
-    const seaM = new THREE.MeshStandardMaterial({ color: 0x6f8b93, emissive: 0x273c42, emissiveIntensity: .8, roughness: .4, metalness: .04, envMapIntensity: 1 });
+    const seaN = new THREE.CanvasTexture(TX.makeWaterNormal());
+    seaN.wrapS = seaN.wrapT = THREE.RepeatWrapping; seaN.repeat.set(4, 7);
+    const seaM = new THREE.MeshStandardMaterial({ color: 0x6f8b93, emissive: 0x273c42, emissiveIntensity: .45, roughness: .17, metalness: .12, envMapIntensity: 1.45, normalMap: seaN, normalScale: new THREE.Vector2(.9, .9) });
+    this.seaN = seaN;
     const WX1 = -4.4, WX0 = -16.5, seaW = WX1 - WX0, seaL = COAST.z0 - COAST.z1 + 3.4;
     const sea = new THREE.Mesh(bake(new THREE.PlaneGeometry(seaW, seaL, 1, 1).rotateX(-Math.PI / 2), false), seaM);
     sea.position.set((WX0 + WX1) / 2, G - .022, (COAST.z0 + COAST.z1) / 2 - .6); this.group.add(sea);
@@ -527,6 +530,7 @@ export class Props {
 
   /** p-driven: station props rise with their era; smoke billows (t) */
   update(p, t, stationAssemble) {
+    if (this.seaN) { this.seaN.offset.x = (t * .012) % 1; this.seaN.offset.y = (t * .007) % 1; }
     // station props: staggered scale-in following the era assembly value
     if (!this._last) this._last = [];
     const changed = stationAssemble.some((a, i) => Math.abs(a - (this._last[i] ?? -1)) > 1e-4);

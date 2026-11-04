@@ -128,10 +128,15 @@ export function makeMaterials() {
     foliage: TX.makeStone({ color: '#5a5838', seed: 25, pores: 1.6 }),
     bark: TX.makeWood({ color: '#4a3a2c', seed: 27, planks: 1 }),
   };
-  // natural, matte, almost no metalness; env reflections kept low
+  // natural, matte, almost no metalness; real relief from tangent-space normals
+  const N = (cv, rep = 1) => {
+    const t = new THREE.CanvasTexture(TX.makeNormalMap(cv));
+    t.colorSpace = ''; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rep, rep); t.anisotropy = 4; return t;
+  };
   const mat = (key, roughness, extra = {}, rep = 1) => new THREE.MeshStandardMaterial({
-    map: T(tex[key], rep), bumpMap: B(tex[key], rep), bumpScale: 1.4, roughness, metalness: 0,
-    vertexColors: true, flatShading: true, envMapIntensity: .45, ...extra,
+    map: T(tex[key], rep), normalMap: N(tex[key], rep), normalScale: new THREE.Vector2(.9, .9), roughness, metalness: 0,
+    vertexColors: true, flatShading: true, envMapIntensity: .5, ...extra,
   });
   const out = {
     stone: mat('stone', .95),

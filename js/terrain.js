@@ -144,15 +144,19 @@ export function buildRidges({ groundY }) {
 /* ---------------- sky dome with horizon glow ---------------- */
 export function buildSky() {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uHaze: { value: new THREE.Color() }, uGlow: { value: new THREE.Color() }, uTop: { value: new THREE.Color() }, uDir: { value: new THREE.Vector3(0, 0, -1) } },
+    uniforms: { uHaze: { value: new THREE.Color() }, uGlow: { value: new THREE.Color() }, uTop: { value: new THREE.Color() }, uDir: { value: new THREE.Vector3(0, 0, -1) }, uSun: { value: new THREE.Vector3(-.58, .46, .67).normalize() }, uSunColor: { value: new THREE.Color(0xffd9a8) } },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.); gl_Position = p.xyww; }',
-    fragmentShader: `uniform vec3 uHaze; uniform vec3 uGlow; uniform vec3 uTop; uniform vec3 uDir; varying vec3 vDir;
+    fragmentShader: `uniform vec3 uHaze; uniform vec3 uGlow; uniform vec3 uTop; uniform vec3 uDir; uniform vec3 uSun; uniform vec3 uSunColor; varying vec3 vDir;
       void main(){
         float y = vDir.y;
         float ahead = pow(max(0., dot(normalize(vec3(vDir.x, 0., vDir.z)), uDir)), 3.);
         vec3 sky = mix(uGlow, uTop, smoothstep(.0, .42, y));
         sky = mix(sky, uGlow * 1.25, (1. - smoothstep(0., .16, y)) * ahead * .5);   // brighter where the road leads
+        float sd = max(0., dot(normalize(vDir), normalize(uSun)));
+        float disk = smoothstep(.9993, .99985, sd);
+        float halo = pow(sd, 12.) * .10 + pow(sd, 120.) * .18;
         vec3 c = y < 0. ? mix(uHaze, uGlow, exp(y * 14.)) : sky;
+        c += uSunColor * (disk * 1.5 + halo);
         gl_FragColor = vec4(c, 1.);
         #include <colorspace_fragment>
       }`,
