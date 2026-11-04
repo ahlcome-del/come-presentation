@@ -230,6 +230,26 @@ export class StoryScene {
     this.renderer.compile(scene, this.camera);
     this.renderer.render(scene, this.camera);          // uploads every texture once
     hidden.forEach((o) => (o.visible = false));
+    // decide on shadows now, behind the loader: time a few frames at a busy era; a slow GPU
+    // gets the shadow-free shaders compiled here, so nothing recompiles mid-journey
+    if (this.shadows && !navigator.webdriver && !/[?&]noadapt/.test(location.search)) {
+      const gl = this.renderer.getContext(), px = new Uint8Array(4), times = [];
+      this.update(this.stationP(1), 0);
+      for (let k = 0; k < 7; k++) {
+        const t0 = performance.now();
+        this.renderer.render(scene, this.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        if (k > 1) times.push(performance.now() - t0);
+        if (k === 3 && times[0] > 60 && times[1] > 60) break;    // clearly slow: don't keep the loader waiting
+      }
+      times.sort((a, b) => a - b);
+      this.benchMs = times[Math.floor(times.length / 2)];
+      if (this.benchMs > 19) {
+        this.shadows = false; this.key.castShadow = false; this.renderer.shadowMap.enabled = false;
+        scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+        this.renderer.compile(scene, this.camera); this.renderer.render(scene, this.camera);
+        hidden.forEach((o) => (o.visible = false));
+      }
+    }
     this.update(0, 0);
     onProgress(1);
   }
@@ -474,8 +494,16 @@ export class StoryScene {
     const heroRotY = .5 + Math.sin(t * .22) * .1 * idle - p * 1.6;
     const floatY = Math.sin(t * .7) * .045 * idle * (1 - turn * .7) * (1 - recline);
     root.position.set(0, floatY + lerp(0, CONFIG.book.restY, recline), lerp(0, -.4, recline));
-    root.rotation.set(lerp(lerp(.12 + Math.sin(t * .31) * .025 * idle, -.32, turn), -Math.PI / 2 + .08, recline), lerp(heroRotY, 0, turn), lerp(-.05, 0, turn));
+    root.rotation.set(lerp(lerp(.12 + Math.sin(t * .31) * .025 * idle, -.32, turn), -Math.PI / 2 + .08, recline), lerp(heroRotY, 0, turn) - .3 * turn * (1 - smooth(clamp(range(R.cover, p) * 1.6))), lerp(-.05, 0, turn));
     root.visible = p < R.bookGone;
+    // a soft warm halo behind the book: its silhouette reads against the dusk
+    if (!this.bookHalo) {
+      this.bookHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.radialTex, color: 0xd08a4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+      this.bookHalo.scale.set(4.2, 4.2, 1); this.scene.add(this.bookHalo);
+    }
+    this.bookHalo.position.set(.1, .05 + floatY, -.8);
+    this.bookHalo.material.opacity = .3 * (1 - smootherstep(.12, .2, p)) * (.75 + .25 * turn);
+    this.bookHalo.visible = this.bookHalo.material.opacity > .002;
 
     /* cover hinge: 0 → 160° with slight overshoot (stays on the spine pivot) */
     const cv = range(R.cover, p);
@@ -538,7 +566,7 @@ export class StoryScene {
     // the era's surroundings (figures, trees, carts…) gather a little before the building itself,
     // so the approach to every era is never an empty sheet
     const pre = this._pre || (this._pre = []);
-    this.assembleVals.forEach((a, i) => { const sp = this.stationP(i); pre[i] = Math.max(a, smootherstep(sp - .085, sp - .02, p)); });
+    this.assembleVals.forEach((a, i) => { const sp = this.stationP(i); pre[i] = Math.max(a, smootherstep(sp - (i > 0 ? .1 : .085), sp - .03, p)); });
     this.props.update(p, t, pre);
     this.library.visible = p > .72;                                          // fully fogged before that
     this.library.userData.setInside(smootherstep(.95, .975, p));
@@ -572,7 +600,7 @@ export class StoryScene {
       const u = EASE(range([R.unfold[0] + o, R.unfold[1] + o], p));          // open to double width
       const sp = this.stationP(k);
       const go = EASE_IO(range([R.toStation[0] + o, R.toStation[1] + o], p)); // fly on to the station
-      const sh = k > 0 ? .013 : 0;                                            // later eras: land & build a little sooner
+      const sh = k > 3 ? .045 : k > 0 ? .032 : 0;                                            // later eras: land & build a little sooner
       const settle = EASE_IO(range([sp + R.settle[0] - sh, sp + R.settle[1] - sh], p)); // lie down on the ground
       const vis = (pl.fanF || 0) > 0 && p > R.riffle[0];
       pl.grp.visible = vis;
@@ -595,7 +623,7 @@ export class StoryScene {
         const sc = CONFIG.world.plateScale;
         const hover = this.plateMatrix(s.x, G + 2.05 + bob, s.z - .55, -.62, 0, 0, sc * .8, this._mH || (this._mH = new THREE.Matrix4()));
         M = blendMatrix(M, hover, go, M);
-        if (go < 1) M.elements[13] += Math.sin(Math.PI * go) * 1.4;
+        if (go < 1) M.elements[13] += Math.sin(Math.PI * go) * .45;     // a low glide, kept in frame
         // 3) settle flat on the ground: becomes the map the era stands on
         if (settle > 0) {
           const flat = this.plateMatrix(s.x, G + .004, s.z, -Math.PI / 2, 0, 0, sc, this._mF || (this._mF = new THREE.Matrix4()));
@@ -615,7 +643,7 @@ export class StoryScene {
     const focus = this.focus || (this.focus = []);
     this.dioramas.forEach((d, i) => {
       const sp = this.stationP(i);
-      const a = range([sp + R.assemble[0] - (i > 0 ? .013 : 0), sp + R.assemble[1]], p);  // 0..1 staged assembly
+      const a = range([sp + R.assemble[0] - (i > 3 ? .045 : i > 0 ? .032 : 0), sp + R.assemble[1]], p);  // 0..1 staged assembly
       this.assembleVals[i] = a;
       d.group.visible = a > 0.001;
       this.stationShadows[i].material.opacity = .7 * smooth(clamp((a - .15) / .15));
@@ -718,9 +746,11 @@ export class StoryScene {
       const nxt = st[i + 1] ? st[i + 1].pos : V3(0, G, S.z - 9);
       // portrait, harbour: lean the approach towards the quay so the frame is never a bare disc
       const hl = !wide && i === 2 ? 1.5 : 0;
-      K(sp - .03, V3(S.x * .2 - hl * .6, G + 2.3, S.z + 6.0), V3(S.x - hl, G + .5, S.z));
+      K(sp - .03, V3(S.x * .2 - hl * .6, G + 2.05, S.z + 5.3), V3(S.x - hl, G + .5, S.z));
       K(sp, V3(S.x * .35, G + 1.7, S.z + 4.55), V3(S.x, G + .42, S.z));
-      K(sp + .027, V3(-S.x * .25, G + 2.1, S.z + 3.1), V3(lerp(S.x, nxt.x, .55), G + .45, lerp(S.z, nxt.z, .55)));
+      K(sp + .02, V3(-S.x * .25, G + 2.1, S.z + 3.1), V3(lerp(S.x, nxt.x, .8), G + .45, lerp(S.z, nxt.z, .8)));
+      // en route: already well on the way, looking at the next era as it rises
+      if (st[i + 1]) K(sp + .036, V3(lerp(S.x, nxt.x, .7) * .3, G + 2.15, lerp(S.z + 3.1, nxt.z + 5.3, .82)), V3(lerp(S.x, nxt.x, .92), G + .5, lerp(S.z, nxt.z, .92)));
     });
     // library: down the last stretch of road and in through the open end of the room
     const LZ = st[st.length - 1].pos.z - 20;
@@ -809,8 +839,6 @@ export class StoryScene {
     this._acc = (this._acc || 0) + dt; this._n = (this._n || 0) + 1;
     if (this._n < 90) return;
     const avg = this._acc / this._n; this._acc = 0; this._n = 0;
-    // slow: drop the shadow map first (one-off shader recompile), then resolution
-    if (avg > 1 / 40 && this.shadows) { this.shadows = false; this.key.castShadow = false; this.renderer.shadowMap.enabled = false; return; }
     // still slow at minimum resolution: ask the UI to drop the costly SVG refraction
     if (avg > 1 / 30 && this.dpr <= CONFIG.dpr.min && !this._slowSent) { this._slowSent = true; window.dispatchEvent(new CustomEvent('cp:slow')); }
     if (avg > 1 / 40 && this.dpr > CONFIG.dpr.min) { this.dpr = Math.max(CONFIG.dpr.min, this.dpr - .25); this.renderer.setPixelRatio(this.dpr); this.resize(); this.frame(); }

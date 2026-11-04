@@ -15,6 +15,17 @@ const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 const cyl = (rt, rb, h, seg, x = 0, y = 0, z = 0) => new THREE.CylinderGeometry(rt, rb, h, seg).translate(x, y, z);
 const merged = (list) => { const g = mergeGeometries(list.map((x) => bake(x)), false); list.forEach((x) => x.dispose()); return g; };
+/** world-scale UVs projected along each face's dominant axis (s = repeats per metre) */
+function boxUV(g, s) {
+  const P = g.attributes.position, N = g.attributes.normal, uv = new Float32Array(P.count * 2);
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), nx = Math.abs(N.getX(i)), ny = Math.abs(N.getY(i)), nz = Math.abs(N.getZ(i));
+    const [u, v] = ny > nx && ny > nz ? [x, z] : nx > nz ? [z, y] : [x, y];
+    uv[i * 2] = u * s; uv[i * 2 + 1] = v * s;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
 function rng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 
 const LEATHER = [0x7a2e22, 0x5c2a1e, 0x2f4a38, 0x24364a, 0x8a6a3e, 0x3a2a22, 0x6e4a2a, 0x4a1e1e, 0x5a5a3a, 0xa88a5a, 0x2a2420, 0x7e5a3a];
@@ -141,7 +152,16 @@ export function buildLibrary({ M, radialTex, mobile, origin }) {
   const flagTex = tex(TX.makeBrick({ rgb: [128, 118, 102], mortar: '#4e463c', rows: 6, cols: 3, vary: 16, seed: 191 }), 3);
   const court = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 6).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: flagTex, bumpMap: flagTex, bumpScale: 1, roughness: .95, envMapIntensity: .2, color: 0x9a8a74 }));
   court.position.set(0, -.262, PZ1 + .78 + 3); group.add(court);
-  group.add(new THREE.Mesh(merged(shell), M.ashlar), new THREE.Mesh(merged([roof]), M.dark));
+  // dressed limestone in large courses: box-projected UVs keep the blocks the same size on
+  // every face (no stretched texture), a darker rusticated plinth and a string course
+  for (const sx of [-1, 1]) shell.push(box(side, .1, .4, sx * (DW + side / 2), 3.8, FZ + .03));
+  const plinth = [];
+  for (const sx of [-1, 1]) plinth.push(box(side - .2, .52, .4, sx * (DW + .1 + (side - .2) / 2), .26, FZ + .04), box(.42, .52, FRONTZ - BACKZ + .9, sx * (SIDEX + .35), .26, (FRONTZ + BACKZ) / 2));
+  const stoneTex = tex(TX.makeBrick({ rgb: [178, 166, 144], mortar: '#7c7262', rows: 7, cols: 3, vary: 20, seed: 77, size: 512 }));
+  const stone = new THREE.MeshStandardMaterial({ map: stoneTex, bumpMap: stoneTex, bumpScale: 1.6, roughness: .94, vertexColors: true, envMapIntensity: .3, color: 0xd6ccb8 });
+  const plinthMat = stone.clone(); plinthMat.color = new THREE.Color(0x9a9080);
+  const shellG = boxUV(merged(shell), 1 / 2.7), plinthG = boxUV(merged(plinth), 1 / 2.7);
+  group.add(new THREE.Mesh(shellG, stone), new THREE.Mesh(plinthG, plinthMat), new THREE.Mesh(merged([roof]), M.dark));
   wood.push(box(.05, DH - .05, .78, -DW + .05, (DH - .05) / 2, FZ - .55), box(.05, DH - .05, .78, DW - .05, (DH - .05) / 2, FZ - .55));      // open door leaves
   // lanterns either side of the door, lamp posts along the forecourt
   const outside = [];

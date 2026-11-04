@@ -49,7 +49,7 @@ function figureKind(costume, pose) {
   }
   // torso & costume
   if (costume === 'toga') {
-    cloth.push(cyl(.012, .021, .08, 7, 0, .04, 0), box(.03, .05, .006, 0, .058, .008).rotateZ(.5).translate(.004, 0, 0));
+    cloth.push(cyl(.012, .021, .08, 7, 0, .04, 0), box(.016, .045, .005, 0, .058, .0095).rotateZ(.55).translate(.003, 0, 0));
   } else if (costume === 'gown') {
     cloth.push(cyl(.01, .024, .07, 8, 0, .035, 0), cyl(.012, .01, .02, 7, 0, .075, 0));
   } else if (costume === 'peasant') {
@@ -67,7 +67,7 @@ function figureKind(costume, pose) {
   const armMat = costume === 'toga' ? skin : costume === 'frock' ? dark : cloth;
   if (pose === 'point') { armMat.push(limb(.034, .004, .0035, -1.25, -.15, .015, sh, 0)); skin.push(ico(.004, 0, .021, sh + .005, .032)); }
   else armMat.push(limb(.034, .004, .0035, -walk * .8, .12, .015, sh, 0));
-  if (pose === 'carry') { armMat.push(limb(.03, .004, .0035, 0, -2.6, -.015, sh, 0)); cloth.push(box(.026, .02, .02, -.016, sh + .036, 0)); }
+  if (pose === 'carry') { armMat.push(limb(.03, .004, .0035, 0, -2.6, -.015, sh, 0)); dark.push(box(.024, .016, .018, -.012, sh + .038, 0)); }   // a basket / crate carried on the shoulder
   else armMat.push(limb(.034, .004, .0035, walk * .8, -.12, -.015, sh, 0));
   // head & neck
   skin.push(cyl(.004, .004, .008, 5, 0, .084, 0), ico(.0095, 1, 0, .095, .001, 1, 1.12, 1));
