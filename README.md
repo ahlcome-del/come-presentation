@@ -207,3 +207,22 @@ lines, engraved relief, region names, corner rosettes and cartouche scroll-work,
 - Library facade: dressed limestone in large courses with box-projected world-scale UVs
   (no stretched blocks), a darker plinth and a string course.
 - Figures: carried loads read as baskets/crates, slimmer toga sash.
+
+## Colour life, weathering & a lived-in library (v8)
+
+- Masonry weathering (`dioramas.js` `weather()`): damp/moss greens creeping up from the
+  foot of every stone, brick and marble part, ochre stains and darker rain-streaked patches,
+  soot on the industrial brick — baked into vertex colours, no extra textures or draw calls.
+- Castle: madder and ochre banners on the keep and gatehouse, pennants on every tower, ivy
+  climbing the front towers and curtain wall. Temple: a faded blue painted frieze with
+  madder fillets, ivy over the ruins. Galleon: painted ochre/madder wales and mast pennants.
+- Industrial: coal smoke drifting from the factory chimney and the locomotive (soft sprite
+  puffs, normal blending, fade in with the assembly; still pose in reduced motion), ivy on
+  the hall. Ministry: green copper crown, canvas awnings over the ground-floor windows, long
+  red banners by the portal, more lit windows, clipped hedges and planters.
+- Library: the tall windows glow with a warm gradient and show the silhouettes of the
+  shelves and book spines inside (two variants, no two windows alike).
+- Figures: per-instance skin and hair tones, height variation, small accessories (staff,
+  cane, satchel, briefcase) so silhouettes read at a glance.
+- Static mode on portrait (reduced motion / no WebGL): copy sits at the top of each chapter
+  on a soft dusk scrim, so it never lies over the book.
