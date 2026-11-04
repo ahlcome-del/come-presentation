@@ -245,3 +245,11 @@ lines, engraved relief, region names, corner rosettes and cartouche scroll-work,
 - Accessibility: progress buttons have aria-labels and aria-current, a polite live region
   announces the chapter, focus rings stay visible inside glass panels and chips stay reachable
   while focused, safe-area insets on the nav, progress and gutters, Twitter card + robots meta.
+
+## v10 — the Antiquité bay
+
+- **Bay beside the temple (≈ .46):** the dark band left of the plinth is now a bay. `terrain.js` exports `COAST`, `shoreX(z)` (the near shore, about 1.3 m west of the map sheet), `farX(z)` (the far shore), `seaDepth(x,z)` and `inCoast()`. The seabed is cut out between the two shores, and the far bank rises gently into the hills as terrain, with no blocky silhouettes.
+- **Near bank (`props.js`):** a lifted sea-green water sheet with a pale shallow band, a sand/wet-sand ribbon that follows `shoreX`, broken foam, rocks and dune grass, a timber jetty, 7 caiques at anchor, figures and amphorae, a row of 12 olives plus cypresses, and a dry-stone wall. The far bank has a sand line and scrub cypresses.
+- Station, landscape and field placement avoid the bay (`inCoast`). Coast props are placed on the terrain after they are added.
+- Era II–V assembly starts slightly earlier: `[sp-.09, sp-.03]`.
+- Check: the harbour frames .55–.65 look the same as before. The 6-check run (best, 1280×800 laptop, mobile, RM, mobile RM, no-GL) plus the sequence: no errors, no horizontal scroll.
