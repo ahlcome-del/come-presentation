@@ -191,3 +191,19 @@ lines, engraved relief, region names, corner rosettes and cartouche scroll-work,
 - A faint warm light pool on the ground under each era.
 - Landscape: a patchwork of ploughed/sown fields draped on the relief, a chapel and two
   windmills between the eras. Portrait: the harbour approach leans towards the quay.
+
+## Fuller transitions, stone & a stutter-free shadow decision (v7)
+
+- Shadows are decided once, behind the loader: a few frames are timed at a busy era
+  (`benchMs`); above ~19 ms the shadow-free shaders are compiled right there, so nothing
+  recompiles or stutters mid-journey (`?noadapt` skips the test). The old automatic
+  mid-scroll shadow switch-off is gone.
+- Between eras the next map lands and its buildings/props start rising earlier, and the
+  travel camera leaves each era a little sooner and passes an "en route" key close to the
+  next one, looking at it as it rises, so frames ~.50 / ~.66 / ~.75 are never an empty sheet.
+- Cover turn (~.09): the book settles at a slight three-quarter angle (page edges catch the
+  light) before the cover opens, with a soft warm halo behind it.
+- Maps flight (~.40): the plates glide low to their stations and stay in frame.
+- Library facade: dressed limestone in large courses with box-projected world-scale UVs
+  (no stretched blocks), a darker plinth and a string course.
+- Figures: carried loads read as baskets/crates, slimmer toga sash.
