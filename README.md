@@ -331,6 +331,13 @@ Run on 4 Nov 2026, around 04:10 Paris time, against the live site https://ahlcom
   are gone. One full-screen `#advance` button: first click opens the book to Antiquity, then one click per era
   (p .310 → .435 → .560 → .685 → .810); the last click opens the library panel. 3.6 s intro, 1.8 s between eras
   (2.4/1.0 s reduced); clicks are ignored in flight.
+- **Pause de station:** the stop is after assembly and before the cutaway. `explode` starts at +.006 progress;
+  the transitional “Les pages deviennent des cartes” and “Les cartes deviennent des époques” blocks have been
+  removed. At .310 the building is complete and only the era chip remains; the cutaway plays on the next click,
+  while the camera leaves.
+- **Edge-to-edge:** the cinematic letterbox bars are removed and the stage uses `100dvh` (with `100svh`/`100vh`
+  fallbacks), so there is no black band at the top/bottom and no crop on iPhone; safe-area insets only position
+  the navigation and the era capsule over the full-bleed scene.
 - **Panels:** Bibliothèque and À propos are fixed, scrollable, focus-managed panels; the nav opens them;
   Escape/back closes; the stage is inert while open; the footer moved into À propos.
 - **Rendering:** PMREM IBL from the procedural sky, a sky shader with sun disc/halo, 2048 shadows on desktop
