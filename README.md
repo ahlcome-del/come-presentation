@@ -302,3 +302,9 @@ Run on 4 Nov 2026, around 04:10 Paris time, against the live site https://ahlcom
 - The noscript Kolonialpolitik link now opens in a new tab with rel="noopener noreferrer", like the card link. Placeholder cards were already non-clickable (no links, nothing focusable).
 - Not done (left for safety): first-paint and loader smoothing.
 - Verification run of 4 Nov 2026, 05:34 Paris time (CET), served locally; captures are in `shots/v14/`. All 7 checks PASS, with 0 console errors and no horizontal scroll.
+
+## v15 (first paint and loader, then frozen)
+- Audit: the first paint was already clean. The stylesheet loads before anything is drawn, the `js` class is set inline in the head, and the loader covers the page from the very first frame. Fonts are capped at 4 s. The maps (`land-50m.json`) load after the loader has gone and fill in behind the scene. The reduced-motion, no-WebGL and error paths all hide the loader.
+- One change (`site/js/main.js`): the wait for the library (`presentations.json`) is now capped at 6 s and its errors are caught, so a slow or failed request can no longer hold the loader. The cards still fill in when the file arrives.
+- Throttled test (400 kbps, 300 ms latency, cache disabled; `tools/throttle.js`): loader done after 38.0 s on desktop, 33.5 s on mobile and 39.5 s with no WebGL. That is close to the minimum time to download the page at that speed. No bare canvas or jumping text before the loader goes away, page scrolls right after, 0 errors.
+- Verification run of 4 Nov 2026, 05:56 Paris time (CET); captures are in `shots/v15/`. All 7 checks PASS, with 0 console errors and no horizontal scroll.
