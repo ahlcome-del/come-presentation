@@ -74,9 +74,10 @@ html:not(.js) .loader { display: none; }
 /* ---------- Fixed scene + atmosphere ---------- */
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; transition: opacity .6s var(--ease); }
 .static-art { display: none; }
+.atmos { overflow: hidden; }
 .atmos { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
 .vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(8, 6, 5, .55) 100%); }
-.grain { position: absolute; inset: -60px; background-image: var(--noise); background-size: 140px; opacity: .05; animation: grain 1s steps(4) infinite; }
+.grain { position: absolute; inset: -60px; max-width: 100vw; background-image: var(--noise); background-size: 140px; opacity: .05; animation: grain 1s steps(4) infinite; }
 @keyframes grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-23px, 17px); } 50% { transform: translate(19px, -31px); } 75% { transform: translate(-11px, -9px); } 100% { transform: translate(0, 0); } }
 .letterbox span { position: fixed; left: 0; right: 0; height: 9px; background: #0d0b09; z-index: 2; pointer-events: none; opacity: var(--lb, 0); }
 .letterbox span:first-child { top: 0; } .letterbox span:last-child { bottom: 0; }
@@ -112,9 +113,10 @@ html.liquid .glass[data-liquid] {
 }
 
 /* ---------- Navigation ---------- */
-.nav-wrap { position: fixed; top: 10px; left: 0; right: 0; z-index: 40; padding: 0 12px; pointer-events: none; }
+.nav-wrap { position: fixed; top: max(10px, env(safe-area-inset-top)); left: 0; right: 0; z-index: 40; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); pointer-events: none; }
 .nav {
-  pointer-events: auto; max-width: 1080px; height: var(--nav-h); margin: 0 auto; padding: 0 10px 0 16px;
+  pointer-events: auto; max-width: 1080px; height: var(--nav-h); margin: 0 auto;
+  padding: 0 max(10px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
   display: flex; align-items: center; justify-content: space-between; border-radius: 999px;
   --glass-blur: 20px; --glass-sat: 180%; --glass-tint: rgba(22, 19, 16, .5);
 }
@@ -131,7 +133,7 @@ html.liquid .glass[data-liquid] {
 .nav__links a[aria-current="true"] { color: var(--ink); }
 
 /* ---------- Progress indicator ---------- */
-.progress { position: fixed; right: clamp(14px, 2.4vw, 34px); top: 50%; z-index: 30; transform: translateY(-50%); height: 200px; width: 120px; transition: opacity .5s var(--ease); }
+.progress { position: fixed; right: max(clamp(14px, 2.4vw, 34px), env(safe-area-inset-right)); top: 50%; z-index: 30; transform: translateY(-50%); height: 200px; width: 120px; transition: opacity .5s var(--ease); }
 .progress__track { position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: var(--hairline); }
 .progress__fill { position: absolute; left: 0; top: 0; width: 1px; height: 100%; background: var(--ink-2); transform-origin: 50% 0; transform: scaleY(var(--p, 0)); }
 .progress ol { list-style: none; margin: 0; padding: 0; position: absolute; inset: 0; }
@@ -164,7 +166,16 @@ html.liquid .glass[data-liquid] {
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; }
 .display {
   margin: 0; font-family: var(--font-ui); font-weight: 600; font-size: clamp(2.5rem, 7vw, 6.5rem); line-height: .98; letter-spacing: -.045em; color: var(--ink);
-  text-wrap: balance; text-shadow: 0 2px 30px rgba(10, 8, 6, .45);
+  text-wrap: balance;
+  text-shadow: 0 1px 2px rgba(10, 8, 6, .5), 0 2px 30px rgba(10, 8, 6, .55), 0 0 60px rgba(10, 8, 6, .35);
+}
+/* keep the thin strokes of the display type crisp over light frames too */
+.chapter--maps .display, .chapter--eras .display, .chip .display { -webkit-text-stroke: .3px rgba(14, 11, 9, .22); }
+.stage::before {
+  /* a soft dusk scrim behind the copy when it can sit over a busy frame */
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: var(--scrim, 0);
+  background: radial-gradient(120% 150% at 4% 46%, rgba(14, 11, 9, .8), rgba(14, 11, 9, .42) 38%, rgba(14, 11, 9, .12) 60%, rgba(14, 11, 9, 0) 76%);
+  transition: opacity .4s linear;
 }
 .k { background: linear-gradient(100deg, #EEE6D4 0%, #D9C7A6 45%, #A8967C 100%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; text-shadow: none; padding-bottom: .06em; }
 .lede { margin: 22px 0 0; max-width: 34ch; font-size: clamp(1.05rem, 1.55vw, 1.4rem); font-weight: 300; line-height: 1.38; letter-spacing: -.01em; color: var(--ink-2); text-shadow: 0 1px 18px rgba(10, 8, 6, .7); }
@@ -174,8 +185,11 @@ html.liquid .glass[data-liquid] {
 /* Era caption chips (positioned under each diorama by js) */
 .chip {
   display: grid; gap: 4px; width: max-content; max-width: min(340px, 80vw); padding: 14px 20px 15px; border-radius: 22px;
-  --glass-tint: rgba(22, 19, 16, .5); --glass-blur: 18px;
+  --glass-tint: rgba(18, 15, 12, .62); --glass-blur: 20px;
+  box-shadow: 0 14px 40px -18px rgba(0, 0, 0, .75), inset 0 0 0 1px rgba(255, 246, 232, .1);
+  text-shadow: 0 1px 12px rgba(10, 8, 6, .55);
 }
+.chip__era, .chip__line { text-shadow: 0 1px 10px rgba(8, 6, 4, .7); }
 .chip__era { font: 600 15px/1.2 var(--font-ui); letter-spacing: -.01em; color: var(--ink); }
 .chip__years { font: 500 11px/1.2 var(--font-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
 .chip__line { margin-top: 4px; font: italic 400 15px/1.35 var(--font-serif); color: var(--ink-2); }
@@ -269,13 +283,24 @@ html.no-webgl .library { padding-top: 10vh; }
   .nav__mark { width: 14px; height: 22px; }
   .nav__links a { padding: 8px 8px; font-size: 11.5px; }
   .cards { grid-template-columns: 1fr; }
-  .progress { right: 10px; height: 140px; width: 16px; }
+  .progress { right: max(10px, env(safe-area-inset-right)); height: 140px; width: 16px; }
   .progress button { font-size: 0; padding: 6px; opacity: 1; }
   .chapter--hero { bottom: auto; top: calc(var(--nav-h) + 8vh); }
   .chapter--lib { bottom: 12vh; }
   .display { letter-spacing: -.04em; }
   html.no-webgl .static-art { right: 50%; top: calc(var(--nav-h) + 7vh); transform: translateX(50%); width: 46vw; opacity: .9; }
+  /* static mode, portrait: copy at the top of each chapter, on a soft dusk scrim that fades in
+     and out (no hard band edges), so the text never sits on the book */
+  html.static-mode .chapter--hero { justify-content: flex-start; padding-top: calc(var(--nav-h) + 12vh); }
+  html.static-mode .chapter:not(.chapter--chip) { background: linear-gradient(to bottom, rgba(20,15,11,0), rgba(20,15,11,.62) 14%, rgba(20,15,11,.4) 38%, rgba(20,15,11,0) 58%); }
   .chip { padding: 12px 16px 13px; }
   .chip__line { font-size: 14px; }
 }
-@media (max-width: 380px) { .nav__brand .wordmark { display: none; } }
+@media (max-width: 380px) {
+  .nav__brand .wordmark { display: none; }
+  /* tight phones: tighten the card grid and the gutter so nothing can overflow */
+  :root { --gutter: 14px; }
+  .cards { gap: 14px; }
+  .card, .card--soon { padding: 9px; }
+  .about { padding-left: 14px; padding-right: 14px; }
+}
