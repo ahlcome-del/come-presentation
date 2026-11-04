@@ -296,3 +296,9 @@ Run on 4 Nov 2026, around 04:10 Paris time, against the live site https://ahlcom
 - Era captions at 390 px: era name 15→17 px, years 11→12 px, caption line 14→15.5 px with line-height 1.45, brighter text and a slightly darker glass behind it. This is in the mobile media query in `site/css/main.css` only.
 - Desktop, laptop and the v12 mobile castle camera are untouched. The reduced-motion desktop captures are 0 px different from v12.
 - Verification run of 4 Nov 2026, 05:13 Paris time (CET), served locally; captures are in `shots/v13/`. Desktop, laptop 1280x800, mobile 390, reduced motion, mobile reduced motion, no WebGL and the 20-frame sequence all PASS, with 0 console errors and no horizontal scroll.
+
+## v14 (French proofread, then frozen)
+- Text edits: straight apostrophes changed to ’ in visible text (L’histoire, L’océan, s’élargit, s’appuie, l’empire); comma before "et" removed (Vapeur, rail et conférences / Guerre, traités et fin des empires); narrow no-break space before ":" (lede, card summary); no-break space to stop one-word last lines ("routes, escales.", "sans le simplifier."); XIXe–XXe tag now uses an en dash.
+- The noscript Kolonialpolitik link now opens in a new tab with rel="noopener noreferrer", like the card link. Placeholder cards were already non-clickable (no links, nothing focusable).
+- Not done (left for safety): first-paint and loader smoothing.
+- Verification run of 4 Nov 2026, 05:34 Paris time (CET), served locally; captures are in `shots/v14/`. All 7 checks PASS, with 0 console errors and no horizontal scroll.
