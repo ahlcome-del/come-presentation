@@ -32,16 +32,15 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { background: var(--bg); color-scheme: dark; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html { height: 100%; overflow: hidden; background: var(--bg); color-scheme: dark; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html.lenis, html.lenis body { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto !important; }
 .lenis.lenis-stopped { overflow: clip; }
 .lenis.lenis-smooth iframe { pointer-events: none; }
 body {
-  margin: 0; background: var(--bg); color: var(--ink);
+  margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
   font-family: var(--font-ui); font-weight: 400; font-size: 17px; line-height: 1.5;
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-  overflow-x: clip;
 }
 img, svg, canvas { display: block; }
 a { color: inherit; }
@@ -150,24 +149,7 @@ html.liquid .glass[data-liquid] {
   transition: transform .45s var(--ease), width .45s var(--ease), opacity .3s var(--ease);
 }
 
-/* ---------- Progress indicator ---------- */
-.progress { position: fixed; right: max(clamp(14px, 2.4vw, 34px), env(safe-area-inset-right)); top: 50%; z-index: 30; transform: translateY(-50%); height: 200px; width: 120px; transition: opacity .5s var(--ease); }
-.progress__track { position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: var(--hairline); }
-.progress__fill { position: absolute; left: 0; top: 0; width: 1px; height: 100%; background: var(--ink-2); transform-origin: 50% 0; transform: scaleY(var(--p, 0)); }
-.progress ol { list-style: none; margin: 0; padding: 0; position: absolute; inset: 0; }
-.progress li { position: absolute; right: 0; top: calc(var(--at) * 100%); }
-.progress button {
-  position: relative; display: flex; align-items: center; gap: 10px; transform: translateY(-50%); margin: 0; padding: 4px 14px 4px 6px;
-  background: none; border: 0; color: var(--muted); font: 500 10.5px/1 var(--font-ui); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; white-space: nowrap;
-  opacity: .0; transition: opacity .4s var(--ease), color .3s var(--ease);
-}
-.progress button::after { content: ""; position: absolute; right: -4px; top: 50%; width: 9px; height: 1px; background: var(--ink-2); transform: translateY(-50%); }
-.progress button.is-active { color: var(--ink); opacity: 1; }
-.progress button.is-active::before { content: ""; position: absolute; right: -8px; top: 50%; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); transform: translate(50%, -50%); }
-.progress:hover button, .progress button:focus-visible { opacity: 1; }
-.progress.is-hidden { opacity: 0; pointer-events: none; }
-
-/* Mobile chapter label, and the first-screen scroll hint */
+/* Mobile chapter label */
 .era-pill {
   position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 35;
   display: none; align-items: center; gap: 8px; padding: 10px 16px 11px; max-width: calc(100vw - 24px);
@@ -180,36 +162,25 @@ html.liquid .glass[data-liquid] {
 @media (max-width: 768px) { .era-pill { display: flex; } }
 html.static-mode .era-pill, html.no-webgl .era-pill { display: none; }
 
-.cue {
-  position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); z-index: 6;
-  display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 10px 16px 12px;
-  border-radius: 999px; --glass-radius: 999px; --glass-tint: rgba(20, 17, 14, .52); --glass-blur: 18px;
-  transform: translateX(-50%); opacity: var(--cue, 1); pointer-events: none;
-  transition: opacity .5s var(--ease), transform .5s var(--ease), visibility 0s .5s;
+/* ---------- Voyage / full-screen stage ---------- */
+.voyage { position: relative; height: 100vh; height: 100svh; z-index: 3; }
+.stage { position: relative; height: 100vh; height: 100svh; overflow: hidden; pointer-events: none; }
+.stage__advance {
+  position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; padding: 0;
+  border: 0; background: transparent; cursor: pointer; pointer-events: auto; -webkit-tap-highlight-color: transparent;
 }
-.cue__label { font: 500 9.5px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase; color: var(--ink-2); }
-.cue__line { position: relative; width: 1px; height: 22px; background: rgba(238, 230, 212, .18); overflow: hidden; }
-.cue__line span { position: absolute; left: 0; top: 0; width: 1px; height: 8px; background: var(--ink-2); animation: cue 2.2s var(--ease) infinite; }
-@keyframes cue { 0% { transform: translateY(-10px); opacity: 0; } 28% { opacity: 1; } 100% { transform: translateY(24px); opacity: 0; } }
-.cue.is-gone { opacity: 0; transform: translate(-50%, 10px); visibility: hidden; }
-html.reduced-motion .cue__line span { animation: none; transform: none; opacity: .8; }
-
-/* ---------- Voyage / pinned stage ---------- */
-.voyage { position: relative; height: 2400vh; z-index: 3; }
-/* the journey is one pinned stage whose length sets how long each era stays on
-   screen (≈ 200 vh per era on desktop). Narrow screens scroll faster under the
-   thumb, so the tall stage would only add wrist-work: shorten it there. */
-@media (max-width: 768px) { .voyage { height: 1750vh; } }
-.stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; pointer-events: none; }
+.stage__advance.is-flying { cursor: progress; }
+.stage__advance:focus-visible { outline: 2px solid var(--accent); outline-offset: -6px; border-radius: 0; }
 .stage a, .stage button { pointer-events: auto; }
-.chapter { position: absolute; left: var(--gutter); right: var(--gutter); max-width: 980px; opacity: 0; visibility: hidden; }
+.chapter { position: absolute; left: var(--gutter); right: var(--gutter); z-index: 2; max-width: 980px; opacity: 0; visibility: hidden; pointer-events: none; }
+.chapter a, .chapter button { pointer-events: auto; }
 .chapter--hero { bottom: 14vh; opacity: 1; visibility: visible; }
 .chapter--open { top: calc(var(--nav-h) + 9vh); }
 .chapter--maps { top: calc(var(--nav-h) + 9vh); }
 .chapter--maps .display { max-width: 7.4em; }
 .chapter--eras { top: calc(var(--nav-h) + 9vh); }
 .chapter--lib { bottom: 16vh; }
-.chapter--chip { left: 0; top: 0; right: auto; max-width: none; will-change: transform; }
+.chapter--chip { left: 0; top: 0; right: auto; z-index: 3; max-width: none; will-change: transform; }
 
 .eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 18px; font: 500 12px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; }
@@ -339,19 +310,40 @@ html.reduced-motion .library::before { animation: none; }
 .footer__link { font: 500 10.5px/1 var(--font-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); text-decoration: none; transition: color .3s var(--ease); }
 .footer__link:hover { color: var(--ink); }
 .footer__contact { --glass-radius: 999px; --glass-tint: rgba(18, 15, 12, .55); padding: 11px 16px 11px 18px; }
+/* ---------- Full-screen panels (library, about) ---------- */
+.panel {
+  position: fixed; inset: 0; z-index: 36; overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(22, 19, 16, .94); -webkit-backdrop-filter: blur(22px) saturate(115%); backdrop-filter: blur(22px) saturate(115%);
+  opacity: 0; visibility: hidden; transform: translateY(18px); pointer-events: none;
+  transition: opacity .5s var(--ease), transform .5s var(--ease), visibility 0s .5s;
+}
+.panel.is-open { opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition: opacity .5s var(--ease), transform .5s var(--ease); }
+.library.panel, .about.panel { position: fixed; inset: 0; z-index: 36; max-width: none; margin: 0; padding: 0; }
+.panel__inner {
+  display: flex; flex-direction: column; min-height: 100%; max-width: calc(var(--maxw) + 2 * var(--gutter)); margin: 0 auto;
+  padding: calc(var(--nav-h) + 7vh) var(--gutter) 9vh;
+}
+.panel__back { align-self: flex-start; margin: 0 0 clamp(26px, 4vh, 46px); }
+.panel .footer { margin-top: clamp(64px, 12vh, 140px); }
+.panel .footer__inner { max-width: none; padding-left: 0; padding-right: 0; }
+html.panel-open .era-pill { display: none; }
+html.panel-open #scene, html.panel-open .static-art { filter: blur(12px) brightness(.42) saturate(.8); }
+html.panel-open .letterbox span { opacity: 0; }
+
 .noscript { color: var(--ink-2); }
 
 /* ---------- Static mode: ONLY when WebGL is unavailable ----------
    (a prefers-reduced-motion setting must never flatten the journey) */
-html.static-mode .voyage { height: auto; }
-html.static-mode .stage { position: relative; height: auto; overflow: visible; pointer-events: auto; }
+html.static-mode .voyage { height: 100vh; height: 100svh; }
+html.static-mode .stage { position: relative; height: 100vh; height: 100svh; overflow: hidden; pointer-events: auto; }
+html.static-mode .chapter:not(.chapter--hero) { display: none; }
+html.static-mode .chapter--hero { display: flex; }
 html.static-mode .chapter { position: relative; inset: auto; left: auto; right: auto; top: auto; bottom: auto; opacity: 1; visibility: visible; min-height: 92vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 18vh var(--gutter) 12vh; max-width: none; transform: none !important; }
 html.static-mode .chapter--chip { min-height: 70vh; align-items: center; }
 html.static-mode .chapter--open, html.static-mode .chapter--maps, html.static-mode .chapter--eras { justify-content: flex-start; padding-top: calc(var(--nav-h) + 12vh); }
 html.static-mode .chapter--lib { display: none; }
 html.static-mode .chapter .rv { opacity: 1 !important; transform: none !important; filter: none !important; }
 html.static-mode .grain { animation: none; }
-html.static-mode .progress { display: none; }
 html.no-webgl #scene { display: none; }
 html.no-webgl .static-art { display: block; position: absolute; z-index: 0; right: 6vw; top: 50vh; width: min(44vw, 520px); transform: translateY(-50%); opacity: .95; }
 html.no-webgl .chapter--chip, html.no-webgl .chapter--open, html.no-webgl .chapter--maps, html.no-webgl .chapter--eras, html.no-webgl .chapter--lib { display: none; }
@@ -389,13 +381,8 @@ html.reduced-motion .card:hover .card__cover svg, html.reduced-motion .card:hove
   .nav__mark { width: 14px; height: 22px; }
   .nav__links a { padding: 8px 8px; font-size: 11.5px; }
   .cards { grid-template-columns: 1fr; }
-  .progress { right: max(8px, env(safe-area-inset-right)); height: 208px; width: 44px; }
-  .progress button { font-size: 0; width: 44px; min-height: 44px; padding: 0; justify-content: flex-end; opacity: 1; }
-  .progress button::after { right: 2px; }
-  .progress button.is-active::before { right: -3px; }
   .footer__inner { flex-direction: column; align-items: flex-start; }
   .footer__links { width: 100%; justify-content: space-between; gap: 12px; }
-  .cue { bottom: max(12px, env(safe-area-inset-bottom)); }
   .chapter--hero { bottom: auto; top: calc(var(--nav-h) + 8vh); }
   .chapter--lib { bottom: 12vh; }
   .display { letter-spacing: -.04em; }
