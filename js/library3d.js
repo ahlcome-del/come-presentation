@@ -171,10 +171,25 @@ export function buildLibrary({ M, radialTex, mobile, origin }) {
   // tall lit windows either side of the door, and the name carved over it
   const winG = [], mull = [];
   for (const x of [-3.3, -2.05, 2.05, 3.3]) {
-    winG.push(box(.62, 2.2, .02, x, 2.0, FZ + .16));
+    const wg = box(.62, 2.2, .02, x, 2.0, FZ + .16), wu = wg.attributes.uv;
+    if (x === -2.05 || x === 3.3) for (let i = 0; i < wu.count; i++) wu.setXY(i, 1 - wu.getX(i), wu.getY(i) * .9 + .05);   // no two windows alike
+    winG.push(wg);
     mull.push(box(.05, 2.3, .05, x, 2.0, FZ + .18), box(.66, .05, .05, x, 2.0, FZ + .18), box(.8, .1, .12, x, .86, FZ + .2), box(.78, .14, .12, x, 3.16, FZ + .2));
   }
-  group.add(new THREE.Mesh(merged(winG), new THREE.MeshStandardMaterial({ color: 0x1a120a, emissive: 0xc88a4e, emissiveIntensity: .55, roughness: .5, vertexColors: true })), new THREE.Mesh(merged(mull), walnut));
+  // the window glow: a warm gradient with the silhouettes of the shelves and books behind
+  const wc = document.createElement('canvas'); wc.width = 128; wc.height = 384; const wx = wc.getContext('2d');
+  const gr = wx.createLinearGradient(0, 0, 0, 384); gr.addColorStop(0, '#3a2414'); gr.addColorStop(.45, '#a86a34'); gr.addColorStop(.8, '#d89a56'); gr.addColorStop(1, '#8a5a30');
+  wx.fillStyle = gr; wx.fillRect(0, 0, 128, 384);
+  const hot = wx.createRadialGradient(70, 250, 4, 70, 250, 120); hot.addColorStop(0, 'rgba(255,214,150,.55)'); hot.addColorStop(1, 'rgba(255,214,150,0)');
+  wx.fillStyle = hot; wx.fillRect(0, 0, 128, 384);
+  const wr = rng(77);
+  for (let sy = 40; sy < 360; sy += 46) {                                       // shelves with rows of book spines
+    for (let bx = 6; bx < 122;) { const bw = 4 + wr() * 6, bh = 24 + wr() * 14; wx.fillStyle = `rgba(${40 + wr() * 50},${20 + wr() * 25},${10 + wr() * 15},${.55 + wr() * .3})`; wx.fillRect(bx, sy + 40 - bh, bw - 1, bh); bx += bw; }
+    wx.fillStyle = 'rgba(30,18,10,.85)'; wx.fillRect(0, sy + 40, 128, 5);
+  }
+  wx.fillStyle = 'rgba(30,18,10,.9)'; wx.fillRect(0, 0, 6, 384); wx.fillRect(122, 0, 6, 384);
+  const winTex = tex(wc);
+  group.add(new THREE.Mesh(mergeGeometries(winG, false), new THREE.MeshStandardMaterial({ color: 0x0c0805, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: .85, roughness: .35, metalness: .1 })), new THREE.Mesh(merged(mull), walnut));
   const pc = document.createElement('canvas'); pc.width = 512; pc.height = 64; const px = pc.getContext('2d');
   px.fillStyle = '#8a7c68'; px.fillRect(0, 0, 512, 64);
   px.font = '600 40px "Source Serif 4", Georgia, serif'; px.textAlign = 'center'; px.textBaseline = 'middle';

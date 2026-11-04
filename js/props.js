@@ -78,10 +78,16 @@ function figureKind(costume, pose) {
   else if (costume === 'coat') dark.push(cyl(.014, .014, .002, 9, 0, .102, 0), cyl(.0085, .0095, .008, 7, 0, .106, 0));
   else if (costume === 'gown') dark.push(cyl(.013, .011, .006, 8, 0, .1, -.002));
   else dark.push(ico(.0098, 0, 0, .098, -.003, 1, .8, 1));                           // hair
+  // small accessories that make silhouettes read: a staff, a cane, a satchel, a briefcase
+  if (pose === 'stand') {
+    if (costume === 'toga' || costume === 'peasant' || costume === 'sailor') dark.push(cyl(.0018, .0018, .125, 4, .024, .0625, .006));
+    else if (costume === 'frock') dark.push(cyl(.0014, .0014, .07, 4, .022, .035, .01));
+    else if (costume === 'coat') dark.push(box(.005, .02, .026, -.021, .036, 0));
+  } else if (pose === 'walk' && costume !== 'gown') dark.push(box(.016, .02, .006, .016, .052, -.006).rotateZ(.2));
   const out = [];
-  if (skin.length) out.push([merged(skin), 'skin']);
+  if (skin.length) out.push([merged(skin), 'skin', 'skin']);
   if (cloth.length) out.push([merged(cloth), 'cloth', 'cloth']);
-  if (dark.length) out.push([merged(dark), 'dark']);
+  if (dark.length) out.push([merged(dark), 'dark', 'hair']);
   return { foot: .03, parts: out };
 }
 
@@ -219,6 +225,8 @@ const CLOTH = [
   [0x4a3f36, 0x6a5a48, 0x7e6a54, 0x3a3a3e, 0x8e3f33],        // greys & browns
   [0x5e5850, 0x7a6e5c, 0x42464c, 0x8a7a62, 0x6b3b33],        // overcoats
 ];
+const SKIN = [0xffffff, 0xf2e2d4, 0xdcc0a8, 0xc0a088, 0xfff0e4, 0xa88a72];   // multipliers on a warm base
+const HAIR = [0xffffff, 0xe8c8a0, 0xc8b8a8, 0xffe8d0, 0xa89888, 0xd8b090];
 const LEAF = [0xffffff, 0xeef2d6, 0xfff2cc, 0xdfe8c4, 0xf6e2b2];
 const F = (e) => POSES.map((_, k) => [`fig${e}${k}`, 2]);
 const ERA_SETS = [
@@ -335,14 +343,15 @@ export class Props {
       const list = byKind[kind], spec = K[kind];
       const era = +(kind.match(/^fig(\d)/) || [0, 0])[1];
       for (const [geo, mk, palKey] of spec.parts) {
-        const pal = palKey === 'cloth' ? CLOTH[era] : palKey === 'leaf' ? LEAF : null;
+        const pal = palKey === 'cloth' ? CLOTH[era] : palKey === 'leaf' ? LEAF : palKey === 'skin' ? SKIN : palKey === 'hair' ? HAIR : null;
+        const salt = palKey === 'skin' ? 3.1 : palKey === 'hair' ? 7.7 : 0, isFig = /^fig/.test(kind);
         const im = new THREE.InstancedMesh(geo, mats[mk], list.length);
         list.forEach((p, j) => {
           q.setFromAxisAngle(up, p.rot);
-          const s = p.s; sc.set(s, s, s);
+          const s = p.s, hv = isFig ? .92 + (Math.abs(Math.sin(p.x * 91.7 + p.z * 13.3) * 9973.1) % 1) * .16 : 1; sc.set(s, s * hv, s);
           m4.compose(pos.set(p.x, G + p.y, p.z), q, sc);
           im.setMatrixAt(j, m4);
-          if (pal) col.setHex(pal[Math.floor(Math.abs(Math.sin(p.x * 12.9898 + p.z * 78.233) * 43758.5453) % pal.length)]).multiplyScalar(.75 + p.tint * .3);
+          if (pal) col.setHex(pal[Math.floor(Math.abs(Math.sin(p.x * 12.9898 + p.z * 78.233 + salt) * 43758.5453) % pal.length)]).multiplyScalar(salt ? .9 + p.tint * .1 : .75 + p.tint * .3);
           else col.setScalar(p.tint);
           im.setColorAt(j, col);
         });

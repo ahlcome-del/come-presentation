@@ -600,8 +600,9 @@ export class StoryScene {
       const u = EASE(range([R.unfold[0] + o, R.unfold[1] + o], p));          // open to double width
       const sp = this.stationP(k);
       const go = EASE_IO(range([R.toStation[0] + o, R.toStation[1] + o], p)); // fly on to the station
-      const sh = k > 3 ? .045 : k > 0 ? .032 : 0;                                            // later eras: land & build a little sooner
-      const settle = EASE_IO(range([sp + R.settle[0] - sh, sp + R.settle[1] - sh], p)); // lie down on the ground
+      // later eras land and start building right after the previous station, so the next
+      // era is already well up as the camera comes round to it (never an empty sheet)
+      const settle = EASE_IO(range(k > 0 ? [sp - .096, sp - .072] : [sp + R.settle[0], sp + R.settle[1]], p));
       const vis = (pl.fanF || 0) > 0 && p > R.riffle[0];
       pl.grp.visible = vis;
       if (!vis) return;
@@ -643,7 +644,7 @@ export class StoryScene {
     const focus = this.focus || (this.focus = []);
     this.dioramas.forEach((d, i) => {
       const sp = this.stationP(i);
-      const a = range([sp + R.assemble[0] - (i > 3 ? .045 : i > 0 ? .032 : 0), sp + R.assemble[1]], p);  // 0..1 staged assembly
+      const a = range(i > 0 ? [sp - .078, sp - .016] : [sp + R.assemble[0], sp + R.assemble[1]], p);  // 0..1 staged assembly
       this.assembleVals[i] = a;
       d.group.visible = a > 0.001;
       this.stationShadows[i].material.opacity = .7 * smooth(clamp((a - .15) / .15));
@@ -677,7 +678,7 @@ export class StoryScene {
         if (it.tilt) it.obj.rotation.z = it.tilt * e;
         if (it.tiltX) it.obj.rotation.x = it.tiltX * e;
       }
-      if (!this.reduced || e > 0) for (const fn of d.animators) fn(t);
+      for (const fn of d.animators) fn(this.reduced ? 3 : t, a);          // reduced motion: a still pose
       if (e > interiorBest) {
         interiorBest = e;
         _v.copy(d.interior).applyAxisAngle(_v2.set(0, 1, 0), d.group.rotation.y).add(d.group.position);
@@ -747,10 +748,10 @@ export class StoryScene {
       // portrait, harbour: lean the approach towards the quay so the frame is never a bare disc
       const hl = !wide && i === 2 ? 1.5 : 0;
       K(sp - .03, V3(S.x * .2 - hl * .6, G + 2.05, S.z + 5.3), V3(S.x - hl, G + .5, S.z));
-      K(sp, V3(S.x * .35, G + 1.7, S.z + 4.55), V3(S.x, G + .42, S.z));
+      K(sp, V3(S.x * .35, G + 1.62, S.z + 3.15), V3(S.x, G + .4, S.z - .05));
       K(sp + .02, V3(-S.x * .25, G + 2.1, S.z + 3.1), V3(lerp(S.x, nxt.x, .8), G + .45, lerp(S.z, nxt.z, .8)));
       // en route: already well on the way, looking at the next era as it rises
-      if (st[i + 1]) K(sp + .036, V3(lerp(S.x, nxt.x, .7) * .3, G + 2.15, lerp(S.z + 3.1, nxt.z + 5.3, .82)), V3(lerp(S.x, nxt.x, .92), G + .5, lerp(S.z, nxt.z, .92)));
+      if (st[i + 1]) K(sp + .045, V3(lerp(S.x, nxt.x, .62) * .3, G + 2.05, nxt.z + 4.35), V3(lerp(S.x, nxt.x, .95), G + .48, lerp(S.z, nxt.z, .95)));
     });
     // library: down the last stretch of road and in through the open end of the room
     const LZ = st[st.length - 1].pos.z - 20;
