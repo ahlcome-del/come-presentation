@@ -86,6 +86,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const lerp = (a, b, t) => a + (b - a) * t;
 const range = (r, x) => clamp((x - r[0]) / (r[1] - r[0]));
 const smooth = (t) => t * t * (3 - 2 * t);
+const smoothstep01 = (a, b, x) => smooth(clamp((x - a) / (b - a)));
 const smootherstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * t * (t * (t * 6 - 15) + 10); };
 
 /** cubic-bezier(x1,y1,x2,y2) solver — same curve as CSS */
@@ -210,6 +211,7 @@ export class StoryScene {
     this.buildBook();
     onProgress(.6);
     this.buildPlates();
+    this.buildScraps();
     this.buildGround();
     onProgress(.75);
     this.buildWorld();
@@ -460,6 +462,20 @@ export class StoryScene {
     });
   }
 
+  /** a handful of torn parchment scraps that trail the plates through the maps flight */
+  buildScraps() {
+    const mat = new THREE.MeshStandardMaterial({ map: this.parchTex, roughness: .96, side: THREE.DoubleSide, emissive: 0x2a1a0e, emissiveIntensity: .18, envMapIntensity: .3 });
+    this.scraps = [];
+    const r = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+    for (let i = 0; i < 7; i++) {
+      const w = .18 + r(i + 1) * .22, h = .14 + r(i + 7) * .2;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 2, 2), mat);
+      m.rotation.set(r(i + 3) * .8 - .4, r(i + 5) * 6.28, r(i + 9) * .6 - .3);
+      m.visible = false; this.scene.add(m);
+      this.scraps.push({ m, ph: r(i + 11) * 6.28, sp: .6 + r(i + 13) * .9, rad: .5 + r(i + 17) * 1.2, hgt: .5 + r(i + 19) * .9 });
+    }
+  }
+
   /** generate the antique maps (async, idle slices) and swap them onto the plates */
   async loadMaps() {
     const [w, h] = this.mobile ? CONFIG.maps.mobile : CONFIG.maps.desktop;
@@ -562,6 +578,7 @@ export class StoryScene {
 
     /* ----- plates, dioramas, atmosphere, camera ----- */
     this.updatePlates(p, t);
+    this.updateScraps(p, t);
     this.updateDioramas(p, t);
     // the era's surroundings (figures, trees, carts…) gather a little before the building itself,
     // so the approach to every era is never an empty sheet
@@ -590,6 +607,25 @@ export class StoryScene {
     _v.set(cx, cy, cz).sub(_v2.set(this.pw * s, 0, 0).applyQuaternion(_q));   // pose = centre of the unfolded plate
     return out.compose(_v, _q, _s);
   }
+  updateScraps(p, t) {
+    if (!this.scraps) return;
+    const on = smoothstep01(.3, .35, p) * (1 - smoothstep01(.44, .5, p));
+    const idle = this.reduced ? 0 : 1;
+    for (const q of this.scraps) {
+      q.m.visible = on > .01;
+      if (!q.m.visible) continue;
+      const u = t * .25 * q.sp + q.ph;
+      q.m.position.set(Math.sin(u) * q.rad, 1.05 + Math.sin(u * 1.7 + q.ph) * q.hgt * .35, -4 - p * 18 + Math.cos(u * .8) * q.rad * 1.3);
+      q.m.rotation.x = (idle ? Math.sin(u * 1.3) * .5 : .2) + .3;
+      q.m.rotation.y += (idle ? .012 * q.sp : 0);
+      q.m.rotation.z = Math.sin(u * 1.1) * .4;
+      q.m.material.opacity = 1;
+      q.m.scale.setScalar(.8 + .2 * Math.sin(u * .9));
+      if (!q.m.material.transparent) { q.m.material = q.m.material.clone(); q.m.material.transparent = true; }
+      q.m.material.opacity = on * .85;
+    }
+  }
+
   updatePlates(p, t) {
     const R = CONFIG.ranges, G = CONFIG.world.groundY;
     const fl = this.reduced ? 0 : 1;
@@ -708,6 +744,16 @@ export class StoryScene {
     this.camera.getWorldDirection(su.uDir.value); su.uDir.value.y = 0; su.uDir.value.normalize();
     this.sky.position.copy(this.camera.position);
     for (const m of this.ridges.userData.mats) { m.uniforms.uHaze.value.copy(haze); m.uniforms.uGlow.value.copy(glow); m.uniforms.uDark.value.copy(dark); }
+    // parallax of the haze layers: the far ridges slide against the near ones as the camera
+    // moves (and a touch with the pointer), so the distance reads as air, not a backdrop
+    if (this.ridges) {
+      const par = -this.camera.position.x * .022 + this.mouse.x * .06;
+      const bob = (this.camera.position.y - CONFIG.world.groundY) * -.014 + this.mouse.y * .025;
+      for (const m of this.ridges.children) {
+        const f = [1.6, 1, .5][m.userData.layer] || .5;      // far layers drift least
+        m.position.x = par * f; m.position.y = bob * f;
+      }
+    }
     this.ridges.visible = into > .01;
     this.key.color.setHex(a.key).lerp(_c1.setHex(b.key), f).lerp(_c1.setHex(C.colors.key), 1 - into);
     // the key light (and its shadow frustum) follows the era in view
@@ -787,8 +833,21 @@ export class StoryScene {
     const dist = pos.distanceTo(look);
     pos.x += this.mouse.x * P.amount * dist * 2.2;
     pos.y += this.mouse.y * P.amount * dist * 1.4;
+    // cinematic settle: as the camera arrives at an era it eases in a little, holds, and a
+    // barely-there drift + roll keeps the frame alive (no handheld wobble)
+    const near = this.focus ? Math.max(0, ...this.focus) : 0;
+    const idle = this.reduced ? 0 : 1;
+    if (near > .001) {
+      const d2 = pos.distanceTo(look);
+      pos.sub(look).multiplyScalar(1 - .045 * near * near).add(look);                    // a gentle push-in on arrival
+      pos.y += (.03 * near + Math.sin(t * .37) * .012 * near * idle);
+      pos.x += Math.sin(t * .27 + 1.3) * .02 * near * idle;
+    }
     cam.position.copy(pos);
     cam.lookAt(look);
+    // a whisper of roll (pointer-led, plus a slow breathing turn)
+    const roll = (this.mouse.x * .012 + (idle ? Math.sin(t * .19) * .006 : 0)) * (1 - smootherstep(.88, .96, p));
+    if (Math.abs(roll) > 1e-5) cam.rotateZ(roll);
 
     // frame the subject away from the headlines (hero / opening), then centre
     const release = 1 - EASE(range([.22, .3], p));

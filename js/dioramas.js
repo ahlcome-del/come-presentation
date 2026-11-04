@@ -28,6 +28,8 @@ const BASE_TOP = 0.05;
 /* ---------------- geometry helpers ---------------- */
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 const cyl = (rt, rb, h, seg, x = 0, y = 0, z = 0) => new THREE.CylinderGeometry(rt, rb, h, seg).translate(x, y, z);
+const ico = (r, d, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => new THREE.IcosahedronGeometry(r, d).scale(sx, sy, sz).translate(x, y, z);
+const cone = (r, h, seg, x = 0, y = 0, z = 0) => new THREE.ConeGeometry(r, h, seg).translate(x, y, z);
 function prism(width, height, depth, alongX = false) {
   const s = new THREE.Shape(); s.moveTo(-width / 2, 0); s.lineTo(width / 2, 0); s.lineTo(0, height); s.closePath();
   const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false }).translate(0, 0, -depth / 2);
@@ -133,9 +135,9 @@ export function makeMaterials() {
   });
   const out = {
     stone: mat('stone', .95),
-    marble: mat('marble', .78),
+    marble: mat('marble', .8, { color: 0xf3e6cd }),
     limestone: mat('limestone', .92),
-    terracotta: mat('terracotta', .9),
+    terracotta: mat('terracotta', .9, { color: 0xd8a07a }),
     dark: mat('slate', .88),
     wood: mat('wood', .86),
     sail: mat('sail', .95, { side: THREE.DoubleSide, bumpScale: .6 }),
@@ -157,6 +159,9 @@ export function makeMaterials() {
     frieze: mat('limestone', .9, { color: 0x7f97a8 }),
     copper: mat('stone', .8, { color: 0x9fc4b0, envMapIntensity: .5 }),
     awning: mat('sail', .95, { side: THREE.DoubleSide, color: 0xb86a4e, bumpScale: .5 }),
+    marbleWarm: mat('marble', .8, { color: 0xf0e4cc }),
+    darkCloth: mat('stone', .95, { color: 0x6b5a48 }),
+    oliveLeaf: mat('foliage', .96, { color: 0xbfc79a, bumpScale: 2.2 }),
   };
   out.ashlar.color = new THREE.Color(0xe0d0b0);               // warm sandstone, not grey
   out.limestone.color = new THREE.Color(0xf7e8c8);
@@ -244,7 +249,12 @@ function antiquity(M, sh) {
   b.part([...column(.5, -.11), ...column(.5, .11)], M.marble, V(.26, 0, 0));
   const ty = fy + .51;                                           // top of capitals
   b.part([box(1.18, .07, .82, 0, ty + .035, 0), box(1.12, .045, .76, 0, ty + .095, 0)], M.marble, V(0, .36, 0));
-  b.part(prism(1.22, .2, .86).translate(0, ty + .118, 0), M.terracotta, V(0, .62, 0), { tilt: .08 });
+  // roof: tiles read as ribs, with a ridge tile on top and gutters at the eaves
+  const roofG = [prism(1.22, .2, .86).translate(0, ty + .118, 0)];
+  for (let i = -4; i <= 4; i++) { const rx = i * .13, ry = ty + .118 + .2 * (1 - Math.abs(rx) / .61); if (i) roofG.push(box(.012, .01, .89, rx, ry + .003, 0)); }
+  roofG.push(cyl(.008, .008, .9, 4).rotateX(Math.PI / 2).translate(0, ty + .322, 0));
+  roofG.push(box(1.26, .012, .05, 0, ty + .112, .43), box(1.26, .012, .05, 0, ty + .112, -.43));
+  b.part(roofG, M.terracotta, V(0, .62, 0), { tilt: .08 });
   // traces of ancient paint: a faded blue frieze with a thin madder fillet
   b.part(box(1.2, .042, .84, 0, ty + .042, 0), M.frieze, V(0, .36, 0));
   b.part([box(1.206, .008, .846, 0, ty + .067, 0), box(1.206, .006, .846, 0, ty + .018, 0)], M.banner, V(0, .36, 0));
@@ -261,8 +271,45 @@ function antiquity(M, sh) {
   // ruins on the base
   b.fixed([cyl(.04, .042, .14, 8, .82, y0 + .07, .34), cyl(.04, .042, .07, 8, .7, y0 + .035, .55),
     cyl(.036, .036, .3, 8).rotateZ(Math.PI / 2).rotateY(.6).translate(-.74, y0 + .036, .44)], M.marble);
+  // a small forum crowd: toga figures in twos and threes on the steps and the plinth
+  const crowd = [], crowdDark = [], seedC = 501;
+  let sc2 = seedC; const rc = () => ((sc2 = (sc2 * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 11; i++) {
+    const a = -.9 + rc() * 2.0, r0 = .52 + rc() * .3;
+    const x = Math.cos(a) * r0 * 1.15, z = .18 + Math.sin(a) * r0 * .55, yy = y0 + .1 + (rc() < .3 ? .05 : 0);
+    const h = .036 + rc() * .012, tilt = (rc() - .5) * .08;
+    crowd.push(cyl(.006, .011, h * .68, 5, x, yy + h * .34, z), cyl(.0045, .0045, h * .16, 4, x, yy + h * .76, z));
+    crowdDark.push(ico(.0062, 0, x, yy + h * .92, z, 1, .9, 1));
+  }
+  b.part(crowd, M.marbleWarm, V(0, 0, .1));
+  b.part(crowdDark, M.darkCloth, V(0, 0, .1));
+  // a ruined stoa behind the temple: five columns on a low step, two broken, one capital fallen
+  const stoa = [], stoaBroken = [];
+  for (let i = 0; i < 5; i++) {
+    const sx = -.62 + i * .31, hh = i === 1 ? .3 : i === 3 ? .22 : .42;
+    stoa.push(box(.08, .03, .08, sx, y0 + .115, -.66), cyl(.026, .031, hh, 7, sx, y0 + .13 + hh / 2, -.66));
+    if (hh > .3) stoa.push(box(.075, .025, .075, sx, y0 + .13 + hh + .012, -.66));
+  }
+  stoa.push(box(1.3, .035, .16, 0, y0 + .117, -.56), cyl(.031, .031, .09, 7).rotateZ(Math.PI / 2).translate(-.2, y0 + .165, -.44));
+  b.fixed(stoa, M.marble);
+  const scrub = [];
+  { let s3 = 907; const r3 = () => ((s3 = (s3 * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 46; i++) { const a = r3() * Math.PI * 2, rr = .6 + r3() * .36; const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+      if (Math.abs(x) < .72 && z > -.5 && z < .55) continue;                 // keep the temple's own footprint clear
+      scrub.push(cone(.012 + r3() * .008, .03 + r3() * .03, 4, x, y0 + .015, z)); } }
+  b.fixed(scrub, M.oliveLeaf);
   b.fixed(ivyClumps(71, 22, (u, v) => [.62 + u * .26, y0 + .005 + v * .09, .3 + (1 - u) * .3]), M.ivy);
   b.fixed(ivyClumps(73, 12, (u, v) => [-.86 + u * .22, y0 + .005 + v * .05, .34 + u * .2]), M.ivy);
+  const olives = [];
+  for (const [ox, oz, sc] of [[.78, -.5, 1], [-.8, -.62, .85], [.9, .55, .8], [-.95, .3, .7]]) {
+    olives.push(cyl(.012, .018, .14 * sc, 5, ox, y0 + .07 * sc, oz).rotateZ(ox * .06), cyl(.008, .01, .07 * sc, 4, ox + .03 * sc, y0 + .13 * sc, oz).rotateZ(-.5));
+  }
+  b.fixed(olives, M.bark);
+  const canopy = [];
+  for (const [ox, oz, sc] of [[.78, -.5, 1], [-.8, -.62, .85], [.9, .55, .8], [-.95, .3, .7]]) {
+    canopy.push(ico(.06 * sc, 0, ox - .02 * sc, y0 + .19 * sc, oz, 1.35, .75, 1.15), ico(.045 * sc, 0, ox + .05 * sc, y0 + .2 * sc, oz + .03, 1.2, .7, 1));
+  }
+  b.fixed(canopy, M.oliveLeaf);
   b.interior.set(0, fy + .25, .05);
   return b;
 }

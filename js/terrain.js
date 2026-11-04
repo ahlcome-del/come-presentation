@@ -18,10 +18,13 @@ export function vnoise(x, y) {
   return (a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy) * 2 - 1;
 }
 export function fbm(x, y, oct = 4) { let s = 0, a = .5, f = 1; for (let o = 0; o < oct; o++) { s += a * vnoise(x * f + o * 17.3, y * f - o * 9.1); f *= 2.03; a *= .5; } return s; }
+const lerp = (a, b, t) => a + (b - a) * t;
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 let STATIONS = [], RIVER_Z = -25, LIB_Z = -56;
 export function setStations(list) { STATIONS = list; if (list.length > 2) RIVER_Z = (list[1].z + list[2].z) / 2 + .6; if (list.length) LIB_Z = list[list.length - 1].z - 20; if (list.length > 2) { HARB.x = list[2].x - 4.15; HARB.z = list[2].z; } }
+/** the sea beyond the Antiquity temple: a shallow bay the road turns away from */
+export const COAST = { x: -9.4, z: -12.6, rx: 5.2, rz: 4.6 };
 /** the harbour basin beside the Discoveries era (water below the quay) */
 export const HARB = { x: -6.25, z: -29, rx: 2.05, rz: 2.7 };
 export const inBasin = (x, z, m = 0) => Math.abs(x - HARB.x) < HARB.rx + m && Math.abs(z - HARB.z) < HARB.rz + m;
@@ -39,7 +42,12 @@ export function terrainH(x, z) {
   const lib = sstep(0, 2.5, Math.max(Math.abs(x) - 5.2, z - (LIB_Z + 6.5), (LIB_Z - 4.2) - z));   // level ground under the library
   const hb = sstep(0, .25, Math.max(Math.abs(x - HARB.x) - HARB.rx, Math.abs(z - HARB.z) - HARB.rz));  // sharp quay edge
   const hb2 = sstep(0, 3, Math.max(Math.abs(x - HARB.x) - HARB.rx, Math.abs(z - HARB.z) - HARB.rz));  // hills ease off around it
-  return (((Math.max(0, hills * 2.6) * hb2 + ripple) * rm - .045 * (1 - rm)) * lib - .01 * (1 - lib)) * hb - .09 * (1 - hb);
+  const cd = Math.max(Math.abs(x - COAST.x) - COAST.rx, Math.abs(z - COAST.z) - COAST.rz);
+  const bayIn = 1 - sstep(0, 1.0, cd);                     // 1 in the water, 0 on land
+  const beach = (1 - sstep(1.0, 3.2, cd)) * (1 - bayIn);    // a low sandy shelf just above the water
+  const land = (((Math.max(0, hills * 2.6) * hb2 + ripple) * rm - .045 * (1 - rm)) * lib - .01 * (1 - lib)) * hb - .09 * (1 - hb);
+  // the sea beyond the first era: water just below the road level, a beach shelf, then the land
+  return lerp(land, -.075 + beach * .055, bayIn) ;
 }
 
 /* ---------------- ground mesh ---------------- */
@@ -100,7 +108,7 @@ export function buildRidges({ groundY }) {
         pts.push([side * (Lr.d + fbm(z * .02, side + k, 2) * 4), groundY + Lr.base + n * Lr.amp + Math.abs(n) * 1.2, z]);
       }
       const m = new THREE.Mesh(ridgeStrip(pts, groundY - 3), mat);
-      m.frustumCulled = false; m.renderOrder = -1;
+      m.frustumCulled = false; m.renderOrder = -1; m.userData.layer = k;
       group.add(m);
     }
     // across the far end
@@ -110,7 +118,7 @@ export function buildRidges({ groundY }) {
       pts.push([x, groundY + Lr.base * .8 + n * Lr.amp * .8 + Math.abs(n), -96 - k * 14]);
     }
     const m = new THREE.Mesh(ridgeStrip(pts, groundY - 3), mat);
-    m.frustumCulled = false; group.add(m);
+    m.frustumCulled = false; m.userData.layer = k; group.add(m);
   });
   group.userData.mats = mats;
   return group;

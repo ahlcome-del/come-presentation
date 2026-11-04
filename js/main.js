@@ -158,6 +158,15 @@ function updateOverlays(p) {
   }
   // cinema letterbox during the journey
   html.style.setProperty('--lb', (smoothstep(.3, .36, p) * (1 - smoothstep(.83, .88, p))).toFixed(3));
+  // text scrim: on while the maps/eras copy or an era chip is on screen (they can sit over a busy frame)
+  const scrim = Math.max(
+    smoothstep(.285, .305, p) * (1 - smoothstep(.355, .375, p)) * .8,
+    smoothstep(.386, .4, p) * (1 - smoothstep(.43, .45, p)) * .85,
+    0,
+  );
+  const chipOn = (p > .43 && p < .86) ? .42 : 0;
+  const sc = Math.max(scrim, chipOn * smoothstep(.43, .47, p) * (1 - smoothstep(.83, .87, p))).toFixed(3);
+  if (html.style.getPropertyValue('--scrim') !== sc) html.style.setProperty('--scrim', sc);
   // library: the 3D becomes a blurred, dimmed backdrop
   const lb = EASE(clamp((p - .88) / .1));
   const canvas = $('#scene');
@@ -165,8 +174,11 @@ function updateOverlays(p) {
   if (canvas.style.filter !== f) canvas.style.filter = f;
   const fill = $('#progress-fill'); if (fill) fill.style.setProperty('--p', p.toFixed(4));
   const idx = p < .27 ? 0 : p < .4 ? 1 : p < .86 ? 2 : 3;
-  $$('#progress button').forEach((b, i) => b.classList.toggle('is-active', i === idx));
+  $$('#progress button').forEach((b, i) => { b.classList.toggle('is-active', i === idx); b.setAttribute('aria-current', String(i === idx)); });
   $('#progress').classList.toggle('is-hidden', p > .97);
+  // announce the era (and the chapter changes) politely, once each
+  const eraNow = p < .27 ? 'Le livre' : p < .4 ? 'Les cartes' : p < .86 ? 'Les époques' : 'La bibliothèque';
+  if (app.eraNow !== eraNow) { app.eraNow = eraNow; const st = $('#sr-status'); if (st) st.textContent = eraNow; }
   $$('.nav__links a').forEach((a) => a.setAttribute('aria-current', String((a.hash === '#voyage' && p < .9) || (a.hash === '#bibliotheque' && p >= .9))));
 }
 
@@ -181,11 +193,12 @@ function onSceneFrame(scene) {
   for (const c of chips) {
     const a = anchors[c.i]; if (!a) continue;
     const o = a.z < 1 ? clamp(a.e) : 0;
-    if (o <= 0.01) { if (c.vis !== false) { c.el.style.visibility = 'hidden'; c.el.style.opacity = '0'; c.vis = false; } continue; }
+    const focused = c.el.contains(document.activeElement);
+    if (o <= 0.01 && !focused) { if (c.vis !== false) { c.el.style.visibility = 'hidden'; c.el.style.opacity = '0'; c.vis = false; } continue; }
     const w = c.el.offsetWidth || 300, h = c.el.offsetHeight || 90;
     const x = clamp(a.x - w / 2, 16, vw - w - 16), y = clamp(a.y + 18, 70, vh - h - 24);
     c.el.style.visibility = 'visible'; c.vis = true;
-    c.el.style.opacity = o.toFixed(3);
+    c.el.style.opacity = (focused ? Math.max(o, .35) : o).toFixed(3);
     c.el.style.transform = `translate3d(${x.toFixed(1)}px, ${(y + (1 - o) * 12).toFixed(1)}px, 0)`;
     c.el.style.filter = o < .99 ? `blur(${((1 - o) * 6).toFixed(2)}px)` : 'none';
   }
@@ -261,6 +274,7 @@ function setupNav() {
     history.replaceState(null, '', `#${id}`);
     if (id !== 'voyage') { target.setAttribute('tabindex', '-1'); target.focus({ preventScroll: true }); }
   });
+  $$('#progress button').forEach((b) => b.setAttribute('aria-current', 'false'));
   $$('#progress button').forEach((b) => b.addEventListener('click', () => {
     const g = b.dataset.goto;
     if (g === 'library') scrollToY($('#bibliotheque').getBoundingClientRect().top + window.scrollY);
@@ -281,12 +295,13 @@ function setupKeyboard() {
       case ' ': if (tag === 'BUTTON' || tag === 'A') return; d = (e.shiftKey ? -1 : 1) * vh * .9; break;
       case 'ArrowDown': d = vh * .3; break;
       case 'ArrowUp': d = -vh * .3; break;
-      case 'Home': e.preventDefault(); lenis.scrollTo(0, { duration: 2.2, easing: EASE }); return;
-      case 'End': e.preventDefault(); lenis.scrollTo(lenis.limit, { duration: 2.2, easing: EASE }); return;
+      case 'Home': e.preventDefault(); lenis.scrollTo(0, { duration: 1.4, easing: EASE }); return;
+      case 'End': e.preventDefault(); lenis.scrollTo(lenis.limit, { duration: 1.4, easing: EASE }); return;
       default: return;
     }
     e.preventDefault();
-    lenis.scrollTo(clamp(lenis.targetScroll + d, 0, lenis.limit), { duration: 1.1, easing: EASE });
+    // lock: a new keypress takes over from the previous glide, so rapid presses always land
+    lenis.scrollTo(clamp(lenis.targetScroll + d, 0, lenis.limit), { duration: .7, easing: EASE });
   });
 }
 

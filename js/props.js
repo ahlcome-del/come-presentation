@@ -14,7 +14,7 @@ import * as THREE from './vendor/three.js';
 import { mergeGeometries } from './vendor/three.js';
 import { bake } from './dioramas.js';
 import * as TX from './textures.js';
-import { terrainH, riverZ, HARB, inBasin } from './terrain.js';
+import { terrainH, riverZ, HARB, inBasin, COAST } from './terrain.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const box = (w, h, d, x = 0, y = 0, z = 0) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
@@ -159,6 +159,8 @@ function kinds(mobile) {
   const seg = mobile ? 6 : 8;
   return {
     cypress: { foot: .09, parts: [[merged([cyl(.012, .016, .08, 5, 0, .04, 0)]), 'bark'], [merged([cone(.055, .32, seg, 0, .22, 0), cone(.04, .2, seg, 0, .38, 0)]), 'foliage']] },
+    shrub: { foot: .05, parts: [[merged([cone(.03, .05, 5, 0, .03, 0), cone(.022, .04, 5, .03, .025, .02), cone(.018, .03, 4, -.025, .02, -.012)]), 'foliage']] },
+    column: { foot: .07, parts: [[merged([box(.07, .02, .07, 0, .01, 0), cyl(.028, .034, .22, 7, 0, .13, 0), box(.08, .025, .08, 0, .252, 0)]), 'limestone']] },
     olive: { foot: .16, parts: [[merged([cyl(.014, .022, .14, 5, 0, .07, 0).rotateZ(.12), cyl(.01, .012, .08, 4, .03, .15, 0).rotateZ(-.5)]), 'bark'],
       [merged([ico(.08, 0, -.02, .19, 0, 1.3, .7, 1.1), ico(.06, 0, .07, .2, .03, 1.2, .7, 1), ico(.05, 0, .01, .24, -.05, 1.2, .7, 1.2)]), 'foliage']] },
     tree: treeKind(1, mobile), tree2: treeKind(2, mobile), tree3: treeKind(3, mobile),
@@ -231,7 +233,7 @@ const LEAF = [0xffffff, 0xeef2d6, 0xfff2cc, 0xdfe8c4, 0xf6e2b2];
 const F = (e) => POSES.map((_, k) => [`fig${e}${k}`, 2]);
 const ERA_SETS = [
   // Antiquité: cypresses & olive groves, figures in togas, amphorae, ruins
-  [['cypress', 8], ['olive', 7], ...F(0), ['amphora', 6], ['ruin', 3], ['rock', 3], ['well', 1]],
+  [['cypress', 9], ['olive', 12], ['shrub', 9], ['column', 4], ...F(0), ['amphora', 7], ['ruin', 4], ['rock', 4], ['well', 1]],
   // Moyen Âge: village, haystacks, cart, banners, trees
   [['tree', 3], ['tree2', 3], ['poplar', 2], ['house', 3], ['houseTimber', 3], ['haystack', 4], ['cart', 1], ...F(1), ['banner', 3], ['rock', 3], ['well', 1]],
   // Grandes découvertes: harbour — boats, crates, barrels, lamps
@@ -416,6 +418,30 @@ export class Props {
       for (let x = QX - .1; x > QX - 2.0; x -= .36) deck.push(cyl(.012, .014, .16, 5, x, G - .04, pz - .09), cyl(.012, .014, .16, 5, x, G - .04, pz + .09));
     }
     this.group.add(new THREE.Mesh(merged(deck), M.wood));
+
+    /* the sea beyond the first era: a wide shallow bay, a wet sand line, rocks and a few
+       caiques at anchor — the Mediterranean the temple looks out on */
+    const seaM = M.water.clone(); seaM.color = new THREE.Color(0x8397a0); seaM.roughness = .42; seaM.envMapIntensity = .7;
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(COAST.rx * 2 + 2.2, COAST.rz * 2 + 2.2, 1, 1).rotateX(-Math.PI / 2), seaM);
+    sea.geometry = bake(sea.geometry, false);
+    sea.position.set(COAST.x, G - .062, COAST.z); this.group.add(sea);
+    const shore = [], foam = [];
+    for (let i = 0; i < 26; i++) {
+      const a = i / 26 * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      const x = COAST.x + ca * (COAST.rx + .55 + Math.abs(Math.sin(a * 3)) * .25), z = COAST.z + sa * (COAST.rz + .55 + Math.abs(Math.cos(a * 2)) * .2);
+      shore.push(box(.16 + Math.abs(sa) * .18, .02, .16 + Math.abs(ca) * .18, x, G - .048, z));
+      foam.push(box(.13 + Math.abs(sa) * .14, .004, .13 + Math.abs(ca) * .14, COAST.x + ca * (COAST.rx + .28), G - .0595, COAST.z + sa * (COAST.rz + .28)));
+    }
+    const sandM = M.limestone.clone(); sandM.color = new THREE.Color(0xd9c49a);
+    this.group.add(new THREE.Mesh(merged(shore), sandM));
+    const foamM = new THREE.MeshBasicMaterial({ color: 0xb9c4c0, transparent: true, opacity: .33, depthWrite: false });
+    this.group.add(new THREE.Mesh(merged(foam), foamM));
+    const beachRocks = [];
+    for (let i = 0; i < 16; i++) { const a = .4 + i * .38, x = COAST.x + Math.cos(a) * (COAST.rx + 1.0 + (i % 3) * .35), z = COAST.z + Math.sin(a) * (COAST.rz + .9 + (i % 4) * .3);
+      beachRocks.push(ico(.06 + (i % 3) * .02, 0, x, G + .018, z, 1.2, .6, 1)); }
+    this.group.add(new THREE.Mesh(merged(beachRocks), M.stone));
+    for (const [bx, bz, br] of [[COAST.x - 1.3, COAST.z + 1.1, .6], [COAST.x + .6, COAST.z - 1.5, 2.2], [COAST.x - .2, COAST.z + 2.1, -.9]]) add('boat', bx, bz, -1, 1.15, br), (place[place.length - 1].water = true);
+    add('fig0stand' in this.K ? 'fig0stand' : 'fig0stand', COAST.x + 1.2, COAST.z + 3.1, -1, 1.1);
 
     /* smoke: soft billowing puffs from chimneys (a few sprites each) */
     this.smokeTex = smokeTex; this.smokes = [];
