@@ -20,7 +20,7 @@
  */
 import * as THREE from './vendor/three.js';
 import { CinematicPass } from './post.js';
-import { PLATES, generateMaps } from './maps.js';
+import { PLATES } from './plates.js';
 import * as TX from './textures.js';
 import { buildDiorama, makeMaterials } from './dioramas.js';
 import { Props } from './props.js';
@@ -107,6 +107,8 @@ export function bezier(x1, y1, x2, y2) {
 }
 const EASE = bezier(.28, .11, .32, 1);
 const EASE_IO = bezier(.65, 0, .35, 1);
+/* Camera flights: accelerate, then a long soft landing — the CSS `--ease-out`. */
+const FLIGHT_EASE = bezier(.16, 1, .3, 1);
 const backOut = (t, s = 1.15) => { t -= 1; return t * t * ((s + 1) * t + s) + 1; };
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -256,10 +258,11 @@ export class StoryScene {
 
     this.resize();
     this.post?.setSize(this.width, this.height, this.dpr);
-    window.addEventListener('resize', this._onResize = () => this.resize(), { passive: true });
+    window.addEventListener('resize', this._onResize = () => { this.resize(); this.wake(); }, { passive: true });
     if (!this.reduced && matchMedia('(pointer: fine)').matches) {
       window.addEventListener('pointermove', this._onPointer = (e) => {
         this.mouseT.set((e.clientX / innerWidth) * 2 - 1, -((e.clientY / innerHeight) * 2 - 1));
+        if (this.parked) this.wake();          // the loop parks on a still frame
       }, { passive: true });
     }
     document.addEventListener('visibilitychange', this._onVis = () => (document.hidden ? this.stop() : this.start()));
@@ -520,6 +523,9 @@ export class StoryScene {
   async loadMaps() {
     let [w, h] = this.mobile ? CONFIG.maps.mobile : CONFIG.maps.desktop;
     if (this.lite) { w = Math.min(w, 1024); h = Math.round(w * 1418 / 2048); }   // weak GPU: half-size maps
+    // maps.js (d3-geo + topojson, ~30 KB) is only needed here, after the loader:
+    // importing it lazily keeps it out of the critical path entirely.
+    const { generateMaps } = await import('./maps.js');
     await generateMaps({
       width: w, height: h,
       onPlate: (i, cv) => {
@@ -993,6 +999,7 @@ export class StoryScene {
   }
 
   start() {
+    this.parked = false;
     if (this.running) return;
     this.running = true; this.last = performance.now();
     const loop = (now) => {
@@ -1005,7 +1012,9 @@ export class StoryScene {
       if (this.flight) {
         const f = this.flight;
         const u = clamp((now - f.start) / f.dur);
-        const e = u * u * (3 - 2 * u);
+        // Same curve as the CSS transitions (a smoothstep has a visible kick at both
+        // ends on a 3.6 s flight).
+        const e = FLIGHT_EASE(u);
         this.p = f.from + (f.to - f.from) * e;
         this.target = f.to;
         this.frame();
@@ -1019,8 +1028,13 @@ export class StoryScene {
         return;
       }
 
-      // reduced: no idle clock, but the loop keeps running until p reaches target
-      if (this.reduced && !this.dirty && Math.abs(this.target - this.p) < 1e-5) return;
+      // Nothing moves when p has arrived, no pointer parallax is pending and no
+      // panel is open: park the loop instead of re-rendering an identical frame.
+      if (!this.dirty && !this.flight && Math.abs(this.target - this.p) < 1e-5
+          && this.mouse.distanceToSquared(this.mouseT) < 1e-8 && !this.panelPaused) {
+        this.stop(); this.parked = true;
+        return;
+      }
       const d = this.target - this.p;
       if (Math.abs(d) < 1e-5) this.p = this.target;
       else this.p += d * (1 - Math.exp(-dt * (this.reduced ? 11 : CONFIG.damping)));
@@ -1030,6 +1044,17 @@ export class StoryScene {
     this.raf = requestAnimationFrame(loop);
   }
   stop() { this.running = false; cancelAnimationFrame(this.raf); }
+  /** Restart a loop that parked itself on an identical frame. */
+  wake() { if (!this.running && !this.panelPaused) this.start(); }
+
+  /** Called while a full-screen panel covers the canvas: no render at all. */
+  setPaused(v) {
+    this.panelPaused = !!v;
+    if (v) return this.stop();
+    this.dirty = true;                 // the frame may have changed while hidden
+    this.parked = false;
+    this.start();
+  }
 
   frame() {
     this.update(this.p, this.time);

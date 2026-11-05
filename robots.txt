@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ahlcome-del.github.io/come-presentation/sitemap.xml
