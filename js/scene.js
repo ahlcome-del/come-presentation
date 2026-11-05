@@ -107,8 +107,10 @@ export function bezier(x1, y1, x2, y2) {
 }
 const EASE = bezier(.28, .11, .32, 1);
 const EASE_IO = bezier(.65, 0, .35, 1);
-/* Camera flights: accelerate, then a long soft landing — the CSS `--ease-out`. */
-const FLIGHT_EASE = bezier(.16, 1, .3, 1);
+/* Camera flights: a symmetric ease-in-out. NOT an ease-out: `bezier(.16,1,.3,1)`
+   covers 75 % of the distance in the first 20 % of the time, which reads as a cut
+   followed by a frozen frame instead of a flight. */
+const FLIGHT_EASE = EASE_IO;
 const backOut = (t, s = 1.15) => { t -= 1; return t * t * ((s + 1) * t + s) + 1; };
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -262,7 +264,7 @@ export class StoryScene {
     if (!this.reduced && matchMedia('(pointer: fine)').matches) {
       window.addEventListener('pointermove', this._onPointer = (e) => {
         this.mouseT.set((e.clientX / innerWidth) * 2 - 1, -((e.clientY / innerHeight) * 2 - 1));
-        if (this.parked) this.wake();          // the loop parks on a still frame
+        if (!this.running) this.wake();        // e.g. while a panel was open
       }, { passive: true });
     }
     document.addEventListener('visibilitychange', this._onVis = () => (document.hidden ? this.stop() : this.start()));
@@ -999,7 +1001,6 @@ export class StoryScene {
   }
 
   start() {
-    this.parked = false;
     if (this.running) return;
     this.running = true; this.last = performance.now();
     const loop = (now) => {
@@ -1028,13 +1029,8 @@ export class StoryScene {
         return;
       }
 
-      // Nothing moves when p has arrived, no pointer parallax is pending and no
-      // panel is open: park the loop instead of re-rendering an identical frame.
-      if (!this.dirty && !this.flight && Math.abs(this.target - this.p) < 1e-5
-          && this.mouse.distanceToSquared(this.mouseT) < 1e-8 && !this.panelPaused) {
-        this.stop(); this.parked = true;
-        return;
-      }
+      // The loop must never park: water, smoke and the library lamps are driven by
+      // `t`, so a still camera is NOT a still frame (freezing the loop froze them).
       const d = this.target - this.p;
       if (Math.abs(d) < 1e-5) this.p = this.target;
       else this.p += d * (1 - Math.exp(-dt * (this.reduced ? 11 : CONFIG.damping)));
@@ -1044,7 +1040,7 @@ export class StoryScene {
     this.raf = requestAnimationFrame(loop);
   }
   stop() { this.running = false; cancelAnimationFrame(this.raf); }
-  /** Restart a loop that parked itself on an identical frame. */
+  /** Restart the loop after it was stopped (panel closed, tab back in front). */
   wake() { if (!this.running && !this.panelPaused) this.start(); }
 
   /** Called while a full-screen panel covers the canvas: no render at all. */
@@ -1052,7 +1048,6 @@ export class StoryScene {
     this.panelPaused = !!v;
     if (v) return this.stop();
     this.dirty = true;                 // the frame may have changed while hidden
-    this.parked = false;
     this.start();
   }
 
