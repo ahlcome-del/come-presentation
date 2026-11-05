@@ -76,7 +76,7 @@ await new Promise((r) => setTimeout(r, 50));
 const doc = window.document;
 const app = window.__cp;
 
-/* The loader is a floor of 1.9 s on a cold visit; jump straight to the finish. */
+/* The curtain must outlast the logo animation (2.3 s cold, .86 s warm). */
 await new Promise((r) => setTimeout(r, 2600));
 
 const $ = (s) => doc.querySelector(s);
@@ -86,6 +86,17 @@ ok(!!app, 'window.__cp is not exposed (boot did not start)');
 ok(doc.documentElement.classList.contains('is-ready'), 'html.is-ready missing (boot never finished)');
 ok($('#loader')?.classList.contains('is-done'), 'the loader was never dismissed');
 ok($('#year')?.textContent === String(new Date().getFullYear()), 'footer year not set');
+{
+  const css = await readFile(new URL('css/main.css', root), 'utf8');
+  const mark = css.match(/\.loader__mark\s*\{([\s\S]*?)\}/);
+  const warm = css.match(/html\.warm \.loader__mark\s*\{([\s\S]*?)\}/);
+  const sec = (block, v) => Number((block?.[1] || '').match(new RegExp(`--mark-${v}:\\s*([\\d.]+)s`))?.[1] || 0) * 1000;
+  const endCold = Math.max(sec(mark, 'draw'), sec(mark, 'delay') + sec(mark, 'fill'));
+  const endWarm = Math.max(sec(warm, 'draw'), sec(warm, 'delay') + sec(warm, 'fill'));
+  console.log(`  loader: logo drawn by ${endCold} ms (cold) / ${endWarm} ms (warm), curtain at 2350 / 950 ms`);
+  ok(endCold > 0 && endCold < 2350, `the cold curtain (2350 ms) cuts the logo animation (${endCold} ms)`);
+  ok(endWarm > 0 && endWarm < 950, `the warm curtain (950 ms) cuts the logo animation (${endWarm} ms)`);
+}
 ok(doc.querySelectorAll('#cards .card').length >= 1, 'the library rendered no card');
 ok($('#cards .card--soon'), 'the "Bientôt" ghost tile is missing');
 ok($('#scene'), 'the canvas is missing');
