@@ -94,6 +94,8 @@ async function boot() {
     ua: navigator.userAgent, dpr: window.devicePixelRatio || 1 };
   if (app.static) html.classList.add('static-mode');
   if (REDUCED) html.classList.add('reduced-motion');
+  // A warm visit replays the same arrival, faster (see the loader rules in main.css).
+  try { if (sessionStorage.getItem('cp:seen') === '1') html.classList.add('warm'); } catch (e) { /* private mode */ }
   if (matchMedia('(prefers-reduced-transparency: reduce)').matches) html.classList.add('opaque');
   if (!MOBILE && supportsLiquid()) html.classList.add('liquid');
   if (MOBILE) html.classList.add('is-mobile');
@@ -479,13 +481,11 @@ async function finishBoot() {
   finished = true;
   clearInterval(barTick);
   barReal = 1; paintBar(1);
-  // The floor exists so the loader does not flash on a cold first visit. On a warm
-  // visit (or with reduced motion) everything is ready in a few hundred ms and the
-  // full 2.4 s curtain would just be invented waiting.
-  let warm = false;
-  try { warm = sessionStorage.getItem('cp:seen') === '1'; } catch (e) { /* private mode */ }
-  try { sessionStorage.setItem('cp:seen', '1'); } catch (e) { /* ignore */ }
-  const minTime = REDUCED ? 450 : warm ? 650 : 1900;
+  // The curtain must never lift before the logo has finished drawing and filling
+  // (css/main.css: 2.3 s cold, .86 s warm, .44 s reduced). A shorter floor cut the
+  // arrival animation in half, which read as "the logo animation is broken".
+  try { sessionStorage.setItem('cp:seen', '1'); } catch (e) { /* private mode */ }
+  const minTime = REDUCED ? 520 : (html.classList.contains('warm') ? 950 : 2350);
   const left = Math.max(0, minTime - (performance.now() - T0));
   if (left > 0) await wait(left);
 

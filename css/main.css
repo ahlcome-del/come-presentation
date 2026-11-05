@@ -62,7 +62,18 @@ sup { font-size: .62em; line-height: 0; vertical-align: .55em; }
   position: fixed; inset: 0; z-index: 90; display: grid; place-content: center; justify-items: center; gap: 28px;
   background: var(--bg); transition: opacity .9s var(--ease), visibility 0s linear .9s;
 }
-.loader__mark { width: 74px; height: auto; aspect-ratio: 1323 / 2095; fill: transparent; stroke: var(--ink); stroke-width: 10; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 2.1s var(--ease) forwards, fillin .8s var(--ease) 1.5s forwards; }
+.loader__mark {
+  width: 74px; height: auto; aspect-ratio: 1323 / 2095; fill: transparent;
+  stroke: var(--ink); stroke-width: 10; stroke-dasharray: 1; stroke-dashoffset: 1;
+  /* The arrival animation must always COMPLETE: the curtain cannot lift before
+     draw + fill are over (see `minTime` in js/main.js, which mirrors these values).
+     A warm visit runs the same gesture, only faster. */
+  --mark-draw: 2.1s; --mark-fill: .8s; --mark-delay: 1.5s;   /* ends at 2.3 s */
+  animation: draw var(--mark-draw) var(--ease) forwards,
+             fillin var(--mark-fill) var(--ease) var(--mark-delay) forwards;
+}
+html.warm .loader__mark { --mark-draw: .78s; --mark-fill: .5s; --mark-delay: .36s; }   /* ends at .86 s */
+html.reduced-motion .loader__mark { --mark-draw: .34s; --mark-fill: .24s; --mark-delay: .2s; }  /* ends at .44 s */
 .loader__bar { position: relative; width: 120px; height: 1px; background: var(--hairline); overflow: hidden; }
 .loader__bar span { position: relative; z-index: 1; display: block; height: 100%; width: 100%; background: var(--ink-2); transform-origin: 0 50%; transform: scaleX(0); transition: transform .5s var(--ease); }
 /* The autonomous fill. It runs on the compositor, so it keeps moving even while the
