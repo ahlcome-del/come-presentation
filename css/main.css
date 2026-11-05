@@ -492,10 +492,9 @@ body { overflow-x: clip; }
   .chapter--hero { max-height: calc(100svh - var(--nav-h) - 12vh); overflow-y: auto; }
 }
 
-/* ==========================================================================
-   Off-screen cards: skip layout, paint and backdrop-filter until they are near
-   ========================================================================== */
-.card, .card--soon { content-visibility: auto; contain-intrinsic-size: auto 420px; }
+/* NOTE: no `content-visibility: auto` on the cards — on a one- or two-card grid it
+   only produced size jumps (the intrinsic-size placeholder is replaced on entry),
+   and the saving was nil. Revisit above ~30 cards. */
 
 /* ==========================================================================
    Stage affordance: until now nothing said the full-screen stage was clickable.
