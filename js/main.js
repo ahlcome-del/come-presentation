@@ -10,13 +10,15 @@
  *    the automatic motion (idle float, pointer parallax, grain) is toned down.
  */
 import { renderLibrary } from './library.js';
-import { supportsLiquid, initLiquid, initGlassPointer } from './glass.js';
+import { supportsLiquid, initLiquid, initGlassPointer, killLiquid } from './glass.js';
 
 const html = document.documentElement;
 const params = new URLSearchParams(location.search);
 
 /* A reload always starts on the cover: never restore the previous position. */
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+/* A deep link (#bibliotheque, #a-propos) is honoured once the boot is over. */
+const INITIAL_HASH = location.hash.slice(1);
 if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 window.scrollTo(0, 0);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches || params.has('reduced');
@@ -92,14 +94,17 @@ async function boot() {
     ua: navigator.userAgent, dpr: window.devicePixelRatio || 1 };
   if (app.static) html.classList.add('static-mode');
   if (REDUCED) html.classList.add('reduced-motion');
+  if (matchMedia('(prefers-reduced-transparency: reduce)').matches) html.classList.add('opaque');
   if (!MOBILE && supportsLiquid()) html.classList.add('liquid');
   if (MOBILE) html.classList.add('is-mobile');
 
   // never let a slow presentations.json hold the loader: cap the wait
   const libP = Promise.race([renderLibrary($('#cards')).catch(() => {}), wait(6000)]);
   const fontsP = Promise.race([
-    Promise.all(['700 40px "UnifrakturCook"', 'italic 400 20px "Source Serif 4"', '400 20px "Source Serif 4"', '500 20px "Libre Franklin"', '600 20px "Libre Franklin"']
-      .map((f) => document.fonts.load(f))),
+    document.fonts?.load
+      ? Promise.all(['700 40px "UnifrakturCook"', 'italic 400 20px "Source Serif 4"', '400 20px "Source Serif 4"', '500 20px "Libre Franklin"', '600 20px "Libre Franklin"']
+        .map((f) => document.fonts.load(f).catch(() => null)))
+      : Promise.resolve(),
     wait(4000),
   ]).catch(() => {});
   setBar(.12);
@@ -195,16 +200,25 @@ function updateOverlays(p) {
     const label = chapterLabel(p), el = $('#era-pill-label');
     if (el && el.textContent !== label) el.textContent = label;
   }
-  // announce the chapter politely, once each
-  const eraNow = chapterLabel(p);
-  if (app.eraNow !== eraNow) { app.eraNow = eraNow; const st = $('#sr-status'); if (st && !app.panel) st.textContent = eraNow; }
+  // The live region is driven by arrivals only (flyToStation → announce): reading
+  // several chapter names per flight saturated the screen-reader queue.
+  app.eraNow = chapterLabel(p);
 }
 
-/* era chips follow the projected front of each diorama base */
+/* era chips follow the projected front of each diorama base.
+   Their box is measured once per resize (see measureChips): reading offsetWidth in
+   the frame callback forced a synchronous layout on every single frame. */
 const chips = [];
+function measureChips() {
+  if (!chips.length) $$('.chapter--chip').forEach((el) => chips.push({ el, i: +el.dataset.era }));
+  for (const c of chips) {
+    c.w = c.el.offsetWidth || 300;
+    c.h = c.el.offsetHeight || 90;
+  }
+}
 function onSceneFrame(scene) {
   if (!app.static) updateOverlays(scene.p);
-  if (!chips.length) $$('.chapter--chip').forEach((el) => chips.push({ el, i: +el.dataset.era }));
+  if (chips.some((c) => !c.w)) measureChips();
   if (app.static) return;
   const anchors = scene.anchors();
   const vw = innerWidth, vh = innerHeight;
@@ -212,7 +226,7 @@ function onSceneFrame(scene) {
     const a = anchors[c.i]; if (!a) continue;
     const o = a.z < 1 ? clamp(a.e) : 0;
     if (o <= 0.01) { if (c.vis !== false) { c.el.style.visibility = 'hidden'; c.el.style.opacity = '0'; c.vis = false; } continue; }
-    const w = c.el.offsetWidth || 300, h = c.el.offsetHeight || 90;
+    const w = c.w || 300, h = c.h || 90;
     const x = clamp(a.x - w / 2, 16, vw - w - 16), y = clamp(a.y + 18, 70, vh - h - (vw <= 768 ? 66 : 24));
     c.el.style.visibility = 'visible'; c.vis = true;
     c.el.style.opacity = o.toFixed(3);
@@ -227,6 +241,17 @@ function announce(name) {
 }
 
 function updateAdvance() {
+  // The visible cue and the six dots: the stage is clickable, and how far in we are.
+  const cue = $('#cue');
+  if (cue) cue.style.setProperty('--cue-o', app.station === 0 && !app.flight && !app.panel ? '1' : '0');
+  const ticks = $('#ticks');
+  if (ticks) {
+    ticks.style.setProperty('--ticks-o', app.static ? '0' : (app.panel ? '0' : '1'));
+    [...ticks.children].forEach((li, i) => {
+      li.classList.toggle('is-on', i <= app.station);
+      li.classList.toggle('is-next', i === app.station + 1);
+    });
+  }
   const btn = $('#advance'); if (!btn) return;
   const next = STATIONS[app.station + 1];
   let label;
@@ -235,7 +260,9 @@ function updateAdvance() {
   else if (app.station === 0) label = 'Ouvrir le livre';
   else label = `Passer à l’époque suivante : ${next.name}`;
   btn.setAttribute('aria-label', label);
-  btn.setAttribute('aria-busy', String(!!app.flight));
+  // aria-busy is not reliably exposed on a <button>; aria-disabled + a data hook is.
+  btn.setAttribute('aria-disabled', String(!!app.flight));
+  btn.dataset.state = app.flight ? 'flying' : 'idle';
   btn.classList.toggle('is-flying', !!app.flight);
 }
 
@@ -270,7 +297,7 @@ function resetToCover() {
 }
 
 /* ------------------------------------------------------------ panels */
-function openPanel(name) {
+function openPanel(name, { push = true } = {}) {
   if (app.panel === name) return;
   const panel = document.getElementById(name);
   if (!panel) return;
@@ -283,31 +310,51 @@ function openPanel(name) {
   app.panel = name;
   html.classList.add('panel-open');
   const stage = $('#voyage'); if (stage) stage.inert = true;
+  // The 3D frame is blurred and dimmed by CSS: rendering it at 60 fps behind an
+  // opaque panel burns the GPU (and the battery) for zero visible pixels.
+  app.scene?.setPaused(true);
   panel.scrollTop = 0;
   updateNavState();
   updateAdvance();
   const title = panel.querySelector('h2');
   if (title) title.focus({ preventScroll: true });
-  history.replaceState(null, '', location.pathname + location.search);
+  // A real history entry, so the system back gesture closes the panel instead of
+  // leaving the site (iOS/Android expect it).
+  if (push) history.pushState({ panel: name }, '', `#${name}`);
 }
 
-function closePanel() {
+function closePanel({ fromHistory = false } = {}) {
   if (!app.panel) return;
+  if (!fromHistory && history.state?.panel) history.back();
   const panel = document.getElementById(app.panel);
   if (panel) { panel.classList.remove('is-open'); panel.inert = true; panel.setAttribute('aria-hidden', 'true'); }
   app.panel = null;
   html.classList.remove('panel-open');
   const stage = $('#voyage'); if (stage) stage.inert = false;
+  app.scene?.setPaused(false);
   updateNavState();
   updateAdvance();
+  if (location.hash && PATHS.has(location.hash.slice(1))) history.replaceState(null, '', location.pathname + location.search);
   const back = $('.nav__links a[href="#voyage"]') || $('.nav__brand');
   back?.focus({ preventScroll: true });
+}
+
+/* The journeys between the stage, the library and the about page are real history
+   entries: back closes the panel, it does not leave the site. */
+const PATHS = new Set(['bibliotheque', 'a-propos', 'voyage']);
+function setupHistory() {
+  addEventListener('popstate', (e) => {
+    const panel = e.state?.panel || null;
+    if (panel) openPanel(panel, { push: false }); else closePanel({ fromHistory: true });
+  });
+  // A shared/deep link opens the panel it points at (the hash was stripped at boot).
+  if (PATHS.has(INITIAL_HASH) && INITIAL_HASH !== 'voyage') openPanel(INITIAL_HASH, { push: false });
 }
 
 /* ------------------------------------------------------------ stage */
 function setupStage() {
   const advance = $('#advance');
-  advance?.addEventListener('click', nextStation);
+  advance?.addEventListener('click', () => { $('#cue')?.style.setProperty('--cue-o', '0'); nextStation(); });
   updateOverlays(0);
   app.scene?.setProgress(0);
   app.scene?.frame();
@@ -325,6 +372,31 @@ function setupStatic() {
 }
 
 /* ------------------------------------------------------------ reveal */
+/* The skip link points at #scenario, a plain anchor on the stage: pointing it at
+   #bibliotheque sent keyboard users to a section that starts `inert`. */
+function setupSkipLink() {
+  const skip = $('.skip');
+  if (!skip) return;
+  skip.addEventListener('click', (e) => {
+    e.preventDefault();
+    closePanelIfAny();
+    const h1 = $('.chapter--hero .display');
+    const target = $('#scenario') || h1;
+    if (h1) { h1.setAttribute('tabindex', '-1'); h1.focus({ preventScroll: true }); }
+    target?.scrollIntoView?.({ block: 'start', behavior: REDUCED ? 'auto' : 'smooth' });
+  });
+}
+function closePanelIfAny() { if (app.panel) closePanel(); }
+
+function setupChipMetrics() {
+  measureChips();
+  let t = 0;
+  addEventListener('resize', () => { clearTimeout(t); t = setTimeout(measureChips, 180); }, { passive: true });
+  if (document.fonts?.ready) document.fonts.ready.then(() => setTimeout(measureChips, 100));
+  // the mobile breakpoint changes the chip padding and the type size
+  matchMedia('(max-width: 768px)').addEventListener?.('change', () => setTimeout(measureChips, 60));
+}
+
 function setupReveal() {
   const io = new IntersectionObserver((entries) => {
     for (const en of entries) if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); }
@@ -366,8 +438,9 @@ function setupNav() {
     const id = a.getAttribute('href').slice(1);
     if (!document.getElementById(id)) return;
     e.preventDefault();
-    history.replaceState(null, '', location.pathname + location.search);
-    if (id === 'voyage') { closePanel(); resetToCover(); }
+    // History is owned by openPanel/closePanel: replacing the entry here would strand
+    // a '#bibliotheque' URL behind a closed panel.
+    if (id === 'voyage') { if (app.panel) closePanel(); resetToCover(); }
     else if (id === 'bibliotheque') openPanel('bibliotheque');
     else if (id === 'a-propos') openPanel('a-propos');
   });
@@ -382,7 +455,9 @@ function setupKeyboard() {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     const t = e.target, tag = t.tagName;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || t.isContentEditable) return;
+    if (app.flight && e.key !== 'Escape') return;      // one flight at a time
     if ((tag === 'BUTTON' || tag === 'A') && (e.key === ' ' || e.key === 'Enter')) return;
+    $('#cue')?.style.setProperty('--cue-o', '0');
     switch (e.key) {
       case 'ArrowRight': case 'ArrowDown': case 'PageDown': case ' ': case 'Enter':
         e.preventDefault(); nextStation(); break;
@@ -404,7 +479,13 @@ async function finishBoot() {
   finished = true;
   clearInterval(barTick);
   barReal = 1; paintBar(1);
-  const minTime = REDUCED ? 700 : 2400;
+  // The floor exists so the loader does not flash on a cold first visit. On a warm
+  // visit (or with reduced motion) everything is ready in a few hundred ms and the
+  // full 2.4 s curtain would just be invented waiting.
+  let warm = false;
+  try { warm = sessionStorage.getItem('cp:seen') === '1'; } catch (e) { /* private mode */ }
+  try { sessionStorage.setItem('cp:seen', '1'); } catch (e) { /* ignore */ }
+  const minTime = REDUCED ? 450 : warm ? 650 : 1900;
   const left = Math.max(0, minTime - (performance.now() - T0));
   if (left > 0) await wait(left);
 
@@ -418,11 +499,14 @@ async function finishBoot() {
 
   if (app.static) setupStatic(); else setupStage();
   setupReveal();
+  setupChipMetrics();
+  setupSkipLink();
   setupNav();
+  setupHistory();
   setupNavState();
   setupKeyboard();
   if (html.classList.contains('liquid')) initLiquid();
-  window.addEventListener('cp:slow', () => html.classList.remove('liquid'), { once: true });
+  window.addEventListener('cp:slow', () => { html.classList.add('low-fx'); killLiquid(); }, { once: true });
   initGlassPointer();
   app.ready = true;
 

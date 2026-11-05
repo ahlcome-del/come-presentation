@@ -9,8 +9,11 @@
   --ink: #EEE6D4;
   --ink-2: #D2C7B2;
   --muted: #9C907D;
-  --accent: #B9573E;
+  --accent: #B9573E;          /* decorative fills only (dots, rules, shaders) */
+  --accent-ink: #CE7A5E;      /* same hue, AA-safe on --bg (4.7:1) for text and focus rings */
   --hairline: rgba(238, 230, 212, .17);
+  --surface-solid: #221E1A;   /* opaque stand-in when transparency is reduced */
+  --tap: 44px;                /* minimum comfortable target */
 
   --font-ui: "Libre Franklin", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
@@ -33,10 +36,6 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { height: 100%; overflow: hidden; background: var(--bg); color-scheme: dark; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-html.lenis, html.lenis body { height: auto; }
-.lenis.lenis-smooth { scroll-behavior: auto !important; }
-.lenis.lenis-stopped { overflow: clip; }
-.lenis.lenis-smooth iframe { pointer-events: none; }
 body {
   margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
   font-family: var(--font-ui); font-weight: 400; font-size: 17px; line-height: 1.5;
@@ -50,7 +49,7 @@ sup { font-size: .62em; line-height: 0; vertical-align: .55em; }
 .muted { color: var(--muted); }
 
 :focus { outline: none; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; border-radius: 6px; }
 
 .skip { position: fixed; left: 12px; top: -60px; z-index: 100; padding: 10px 16px; background: var(--raised); color: var(--ink); border-radius: 999px; text-decoration: none; font-size: 14px; transition: top .3s var(--ease); }
 .skip:focus { top: 12px; }
@@ -74,6 +73,15 @@ sup { font-size: .62em; line-height: 0; vertical-align: .55em; }
   transform: scaleX(0); animation: barfill 3.2s cubic-bezier(.16, .72, .3, 1) forwards;
 }
 @keyframes barfill { 0% { transform: scaleX(0); } 55% { transform: scaleX(.62); } 100% { transform: scaleX(.9); } }
+/* Past 3.2 s the bar would sit frozen at 90 % (the classic lie): it turns into a
+   quietly travelling shuttle instead, so long boots still read as "working". */
+.loader__bar .shuttle {
+  position: absolute; left: 0; top: 0; height: 100%; width: 34%; z-index: 2; background: var(--ink);
+  transform: translateX(-100%); opacity: 0; animation: shuttle 1.35s cubic-bezier(.5, 0, .5, 1) 3.3s infinite;
+}
+@keyframes shuttle { 0% { transform: translateX(-100%); opacity: 0; } 12% { opacity: .9; } 88% { opacity: .9; } 100% { transform: translateX(295%); opacity: 0; } }
+html.reduced-motion .loader__bar .shuttle { animation-duration: 2.6s; }
+html.reduced-motion .loader { transition-duration: .45s; }
 .loader.is-done { opacity: 0; visibility: hidden; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes fillin { to { fill: var(--ink); stroke-width: 0; } }
@@ -85,7 +93,9 @@ html:not(.js) .loader { display: none; }
 .atmos { overflow: hidden; }
 .atmos { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
 .vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(8, 6, 5, .55) 100%); }
-.grain { position: absolute; inset: -60px; max-width: 100vw; background-image: var(--noise); background-size: 140px; opacity: .05; animation: grain 1s steps(4) infinite; }
+.grain { position: absolute; inset: -60px; max-width: 100vw; background-image: var(--noise); background-size: 140px; background-repeat: repeat; opacity: var(--grain-op, .05); animation: grain 1s steps(4) 6; }
+/* The film grain is texture, not motion: six cycles and it stops for good, instead of
+   compositing a full-screen layer forever. --grain-op lets a slow GPU switch it off. */
 @keyframes grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-23px, 17px); } 50% { transform: translate(19px, -31px); } 75% { transform: translate(-11px, -9px); } 100% { transform: translate(0, 0); } }
 
 /* ---------- Liquid glass component ---------- */
@@ -108,7 +118,7 @@ html:not(.js) .loader { display: none; }
 .glass::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
   background:
-    radial-gradient(420px circle at var(--mx, 30%) var(--my, 0%), rgba(255, 245, 225, var(--hl, .07)), transparent 60%),
+    radial-gradient(420px circle at var(--mx, 30%) var(--my, 0%), rgba(255, 245, 225, var(--hover-hl, .07)), transparent 60%),
     var(--noise);
   background-size: auto, 140px; opacity: .55; mix-blend-mode: soft-light;
 }
@@ -131,10 +141,11 @@ html.liquid .glass[data-liquid] {
 .nav__brand .wordmark { font-size: 18px; line-height: 1; white-space: nowrap; }
 .nav__links { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; }
 .nav__links a {
-  display: block; padding: 8px 14px; font-size: 12.5px; letter-spacing: .01em; color: var(--ink-2); text-decoration: none; border-radius: 999px; white-space: nowrap;
-  background-image: linear-gradient(var(--accent), var(--accent)); background-repeat: no-repeat; background-size: 0 1px; background-position: 50% calc(100% - 6px);
+  display: grid; place-items: center; min-height: var(--tap); padding: 0 14px; font-size: 12.5px; letter-spacing: .01em; color: var(--ink-2); text-decoration: none; border-radius: 999px; white-space: nowrap;
+  background-image: linear-gradient(var(--accent-ink), var(--accent-ink)); background-repeat: no-repeat; background-size: 0 1px; background-position: 50% calc(100% - 11px);
   transition: color .3s var(--ease), background-size .4s var(--ease);
 }
+.nav__links a:active { color: var(--ink); }
 .nav__links a:hover { color: var(--ink); background-size: calc(100% - 28px) 1px; }
 .nav__links a[aria-current="true"] { color: var(--ink); }
 .nav__links a { position: relative; z-index: 1; }
@@ -246,7 +257,14 @@ html.reduced-motion .library::before { animation: none; }
 .section-title { margin: 0; font-weight: 600; font-size: clamp(2.5rem, 7vw, 6.5rem); line-height: .98; letter-spacing: -.045em; }
 .section-lede { margin: 18px 0 0; font-size: clamp(1.05rem, 1.55vw, 1.4rem); font-weight: 300; color: var(--ink-2); letter-spacing: -.01em; }
 .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(16px, 2vw, 28px); }
-.card { --card-pad: 12px; display: flex; flex-direction: column; min-height: 100%; padding: var(--card-pad); transition: box-shadow .5s var(--ease); --glass-tint: rgba(22, 19, 16, .62); }
+.card {
+  --card-pad: 12px; display: flex; flex-direction: column; min-height: 100%; padding: var(--card-pad);
+  transition: box-shadow .5s var(--ease), opacity .45s var(--ease); --glass-tint: rgba(20, 17, 14, .72);
+}
+/* Hover used to animate four box-shadows (two of them inset) = a repaint of the whole
+   card on every frame. The lift is now a static shadow plus an opacity/transform veil. */
+.card::after { transition: opacity .45s var(--ease); }
+.card:hover::after, .card:focus-within::after { opacity: .82; }
 .card:hover { box-shadow: 0 1px 0 0 rgba(255, 255, 255, .12) inset, 0 -1px 0 0 rgba(0, 0, 0, .25) inset, 0 30px 70px -28px rgba(0, 0, 0, .75), 0 2px 8px -2px rgba(0, 0, 0, .4); }
 .card:focus-within { box-shadow: 0 0 0 1px var(--hairline), 0 30px 70px -30px rgba(0, 0, 0, .8); }
 .card__cover { position: relative; border-radius: calc(var(--glass-radius) - var(--card-pad)); overflow: hidden; aspect-ratio: 4 / 3; background: var(--raised); }
@@ -277,7 +295,10 @@ html.reduced-motion .library::before { animation: none; }
   --glass-radius: 999px; --glass-tint: rgba(18, 15, 12, .55);
   transition: transform .35s var(--ease), background-color .35s var(--ease);
 }
-.pill:hover { transform: scale(1.02); --hl: .16; }
+.pill:not(.glass) { --glass-radius: 999px; }
+.pill:hover { transform: scale(1.02); --hover-hl: .16; }
+.pill:active { transform: scale(.985); transition-duration: .12s; }
+.pill:focus-visible { outline-offset: 2px; }
 .pill svg { width: 7px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; transition: transform .35s var(--ease); }
 .pill:hover svg { transform: translateX(2px); }
 .card--soon { --card-pad: 12px; border: 1px solid rgba(238, 230, 212, .10); border-radius: var(--glass-radius); padding: var(--card-pad); display: flex; flex-direction: column; background: linear-gradient(160deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012) 58%, rgba(255, 255, 255, .025)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 24px 60px -30px rgba(0, 0, 0, .6); }
@@ -348,6 +369,7 @@ html.no-webgl .library { padding-top: 10vh; }
    user-driven motion and stays exactly as it is. */
 html.reduced-motion .grain { animation: none; }
 html.reduced-motion .atmos { --grain-op: 0; }
+html.low-fx .grain { animation: none; opacity: .04; }
 html.reduced-motion.is-ready .chapter--hero .rv { transition-duration: .35s; transition-delay: 0s !important; }
 html.reduced-motion .rv-io { transition-duration: .4s; transition-delay: 0s !important; }
 html.reduced-motion .card { transform: none !important; }
@@ -373,7 +395,7 @@ html.reduced-motion .card:hover .card__cover svg, html.reduced-motion .card:hove
   .nav { padding: 0 6px 0 14px; }
   .nav__brand .wordmark { font-size: 15px; }
   .nav__mark { width: 14px; height: 22px; }
-  .nav__links a { padding: 8px 8px; font-size: 11.5px; }
+  .nav__links a { padding: 0 8px; font-size: 11.5px; }
   .cards { grid-template-columns: 1fr; }
   .footer__inner { flex-direction: column; align-items: flex-start; }
   .footer__links { width: 100%; justify-content: space-between; gap: 12px; }
@@ -392,7 +414,7 @@ html.reduced-motion .card:hover .card__cover svg, html.reduced-motion .card:hove
 }
 @media (max-width: 440px) {
   .nav__brand .wordmark { display: none; }
-  .nav__links a { padding: 8px 7px; }
+  .nav__links a { padding: 0 7px; }
 }
 @media (max-width: 380px) {
   .nav__brand .wordmark { display: none; }
@@ -402,3 +424,105 @@ html.reduced-motion .card:hover .card__cover svg, html.reduced-motion .card:hove
   .card, .card--soon { --card-pad: 9px; }
   .about { padding-left: 14px; padding-right: 14px; }
 }
+
+/* ==========================================================================
+   User preferences (Apple HIG: a glass material must never be mandatory)
+   ========================================================================== */
+
+/* "Reduce transparency" — macOS/iOS/Windows. The material becomes opaque, the
+   refraction filter is dropped, and the specular rim becomes a real border. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .nav, .chip, .pill, .card, .era-pill, .card--soon {
+    background: var(--surface-solid);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  html.liquid .glass[data-liquid] { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .glass::before { opacity: .5; }
+  .glass::after { display: none; }
+  .panel { background: #1b1815; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html.panel-open #scene, html.panel-open .static-art { filter: brightness(.34); }
+  .atmos { display: none; }
+  .footer { background: #1b1815; }
+}
+
+/* "Increase contrast" — text and chrome are pushed to their maximum legibility. */
+@media (prefers-contrast: more) {
+  :root { --ink-2: #E4DAC6; --muted: #C4B8A2; --hairline: rgba(238, 230, 212, .34); --accent-ink: #E09172; }
+  .glass, .card, .chip, .nav, .pill, .era-pill { --glass-tint: rgba(14, 12, 10, .82); }
+  .glass::before { opacity: 1; }
+  .glass::after { display: none; }
+  .display, .section-title, .card__title, .about__text { text-shadow: 0 1px 3px rgba(10, 8, 6, .8); }
+  :focus-visible { outline-width: 3px; }
+}
+
+/* Forced colours (Windows high contrast): drop the material, keep the structure. */
+@media (forced-colors: active) {
+  .glass, .card, .chip, .nav, .pill, .era-pill, .card--soon, .panel { background: Canvas; border: 1px solid CanvasText; }
+  .glass::before, .glass::after, .atmos, .vignette { display: none; }
+  .loader { background: Canvas; }
+  .loader__mark { stroke: CanvasText; }
+  .loader__bar span, .loader__bar::after, .loader__bar .shuttle { background: Highlight; }
+  .k { -webkit-text-fill-color: CanvasText; color: CanvasText; background: none; }
+  :focus-visible { outline: 2px solid Highlight; }
+}
+
+/* Motion: honour the OS setting for every decorative animation, not only ours. */
+@media (prefers-reduced-motion: reduce) {
+  .grain, .library::before, .loader__bar .shuttle, .card__cover::after { animation: none !important; }
+  .nav__thumb, .chapter--chip, .card__cover svg, .card__cover img { transition-duration: .001ms !important; }
+}
+
+/* ==========================================================================
+   Layout guard: nothing may open a horizontal scrollbar, and a long page must
+   still be scrollable when the viewport is very short (landscape phones, or a
+   large Dynamic Type size), where the fixed stage used to crop the headline.
+   ========================================================================== */
+html { overflow-x: clip; }
+body { overflow-x: clip; }
+@media (max-height: 480px) and (orientation: landscape) {
+  html { overflow-y: auto; }
+  .stage { min-height: 140svh; }
+  .chapter--hero { bottom: auto; top: calc(var(--nav-h) + 6vh); }
+  .display { font-size: clamp(2rem, 5.5vw, 3.2rem); }
+}
+@media (max-width: 768px) {
+  /* two short lines instead of four clipped ones on a 320×480 phone */
+  .display { font-size: clamp(2.1rem, 9vw, 3.4rem); }
+  .chapter--hero { max-height: calc(100svh - var(--nav-h) - 12vh); overflow-y: auto; }
+}
+
+/* ==========================================================================
+   Off-screen cards: skip layout, paint and backdrop-filter until they are near
+   ========================================================================== */
+.card, .card--soon { content-visibility: auto; contain-intrinsic-size: auto 420px; }
+
+/* ==========================================================================
+   Stage affordance: until now nothing said the full-screen stage was clickable.
+   The cue disappears for good after the first click; the ticks are the "1 of 6"
+   the keyboard/screen-reader user also gets through aria-label.
+   ========================================================================== */
+.stage__cue {
+  position: absolute; left: 50%; bottom: max(26px, calc(env(safe-area-inset-bottom) + 18px));
+  transform: translateX(-50%); margin: 0; z-index: 4; display: inline-flex; align-items: center; gap: 9px;
+  padding: 9px 16px 10px; border-radius: 999px; pointer-events: none;
+  font: 500 11px/1 var(--font-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2);
+  background: rgba(18, 15, 12, .42); border: 1px solid rgba(255, 246, 232, .12);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  opacity: var(--cue-o, 0); transition: opacity .6s var(--ease);
+}
+.stage__cue-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: cuepulse 2.4s var(--ease) infinite; }
+@keyframes cuepulse { 0%, 100% { opacity: .35; transform: scale(.8); } 45% { opacity: 1; transform: scale(1); } }
+html.reduced-motion .stage__cue-dot, html.low-fx .stage__cue-dot { animation: none; opacity: .8; }
+html.panel-open .stage__cue, html.static-mode .stage__cue { display: none; }
+@media (max-width: 768px) { .stage__cue { bottom: max(64px, calc(env(safe-area-inset-bottom) + 58px)); } }
+
+.stage__ticks {
+  position: absolute; right: max(18px, env(safe-area-inset-right)); top: 50%; z-index: 4;
+  margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px;
+  transform: translateY(-50%); pointer-events: none; opacity: var(--ticks-o, 0); transition: opacity .5s var(--ease);
+}
+.stage__ticks li { width: 4px; height: 4px; border-radius: 50%; background: rgba(238, 230, 212, .28); transition: background-color .4s var(--ease), transform .4s var(--ease); }
+.stage__ticks li.is-on { background: var(--ink); transform: scale(1.35); }
+html.panel-open .stage__ticks, html.static-mode .stage__ticks { display: none; }
+@media (max-width: 768px) { .stage__ticks { right: max(10px, env(safe-area-inset-right)); gap: 7px; } .stage__ticks li { width: 3px; height: 3px; } }

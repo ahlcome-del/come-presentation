@@ -12,6 +12,10 @@
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Côme">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Côme Presentation">
 <meta property="og:locale" content="fr_FR">
@@ -30,7 +34,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@300;400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400;1,8..60,500&family=UnifrakturCook:wght@700&display=swap">
 <link rel="stylesheet" href="css/main.css">
-<link rel="modulepreload" href="js/main.js">
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -43,12 +46,12 @@
   <g id="liquid-filters"></g>
 </svg>
 
-<a class="skip" href="#bibliotheque">Aller à la bibliothèque</a>
+<a class="skip" href="#scenario">Aller au récit</a>
 
 <!-- 0) Preloader -->
 <div class="loader" id="loader" role="status" aria-live="polite">
   <svg class="loader__mark" viewBox="0 0 1323 2095" aria-hidden="true"><use href="#sil"/></svg>
-  <div class="loader__bar"><span id="loader-bar"></span></div>
+  <div class="loader__bar"><span id="loader-bar"></span><span class="shuttle" aria-hidden="true"></span></div>
   <p class="visually-hidden">Chargement…</p>
 </div>
 
@@ -100,8 +103,12 @@
   <p id="sr-status" class="visually-hidden" role="status" aria-live="polite"></p>
   <!-- The click story: one full-screen stage, no page scroll -->
   <section id="voyage" class="voyage" aria-label="Voyage : du livre aux époques">
-    <div class="stage">
+    <div class="stage" id="scenario">
       <button class="stage__advance" id="advance" type="button" aria-label="Ouvrir le livre"></button>
+      <p class="stage__cue" id="cue" aria-hidden="true"><span class="stage__cue-dot"></span>Cliquez pour avancer</p>
+      <ol class="stage__ticks" id="ticks" aria-hidden="true">
+        <li></li><li></li><li></li><li></li><li></li><li></li>
+      </ol>
       <div class="chapter chapter--hero" data-key="0.02" data-out="0.028">
         <p class="eyebrow rv"><span class="dot" aria-hidden="true"></span>Présentations historiques</p>
         <h1 class="display rv">L’histoire,<br><span class="k">présentée.</span></h1>
@@ -158,7 +165,6 @@
     <div class="panel__inner">
       <button class="panel__back pill glass" type="button" data-close>Retour au voyage</button>
       <h2 id="about-title" class="eyebrow rv-io" tabindex="-1"><span class="dot" aria-hidden="true"></span>À propos</h2>
-      <!-- Placeholder: replace these two sentences with the author's own text. -->
       <p class="about__text rv-io">Côme Presentation réunit des présentations historiques conçues comme de courts documentaires interactifs, entre récit, cartes et reconstitutions en trois dimensions. <span class="about__muted">Chaque présentation s’appuie sur des sources citées et cherche à rendre le passé lisible, sans le&nbsp;simplifier.</span></p>
       <footer class="footer">
         <div class="footer__inner">

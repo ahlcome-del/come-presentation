@@ -1,0 +1,19 @@
+{
+  "name": "Côme Presentation — L’histoire, présentée.",
+  "short_name": "Côme",
+  "description": "Présentations historiques en 3D, à explorer.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#191613",
+  "theme_color": "#191613",
+  "categories": ["education", "history", "books"],
+  "icons": [
+    { "src": "assets/icons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icons/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "assets/icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

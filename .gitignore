@@ -1,0 +1,11 @@
+# Dependencies (dev only — the site itself has no build step)
+node_modules/
+package-lock.json
+
+# Local server / editor noise
+.DS_Store
+Thumbs.db
+*~
+
+# QA captures (tools/*.js write here)
+shots/
